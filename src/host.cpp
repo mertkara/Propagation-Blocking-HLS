@@ -165,31 +165,17 @@ int main(int argc, char** argv) {
     devices.resize(1);
     OCL_CHECK(err, cl::Program program(context, devices, bins, NULL, &err));
 
+	/* Initialize Buffers */
     ValueVec inputVals(NUM_OF_TEST_SIZE);
     IndexVec indexes(NUM_OF_TEST_SIZE);
-    ValueVec sums(OUTPUT_VECTOR_SIZE);
-    ValueVec sums_sw(OUTPUT_VECTOR_SIZE);
+    ValueVec sums(OUTPUT_VECTOR_SIZE, 0);
+    ValueVec sums_sw(OUTPUT_VECTOR_SIZE, 0);
 
-    /* Input buffer */
-    //Value Stream
-    int bucketID = 0;
     for(int i = 0; i < NUM_OF_TEST_SIZE ; i++) {
-
-        inputVals[i] = i % BUCKET_WIDTH;
+        inputVals[i] = 3;
+		indexes[i] = (int)(i/BUCKET_WIDTH) + i % 5;
+		sums_sw[(int)(i / BUCKET_WIDTH) + i % 5] += inputVals[i];
     }
-
-    /* Input buffer */
-    //index stream
-        unsigned char *index_host = ((unsigned char *) malloc(globalbuffersize));
-        if(input_host==NULL) {
-            printf("Error: Failed to allocate host side copy of OpenCL source buffer of size %zu\n",globalbuffersize);
-            return EXIT_FAILURE;
-        }
-        size_t indexVal = -1;
-        for(size_t i = 0; i < globalbuffersize; i++) {
-            if(i%8) indexVal++;
-        	index_host[i] = indexVal ;
-        }
 
     short ddr_banks = NDDR_BANKS;
 
