@@ -3,19 +3,16 @@
   <configuration name="Emulation-SW" id="com.xilinx.sdx.opencl.config.sw_emu.1847846692" dirty="true">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" reportType="None">
       <binaryContainers name="binary_container_1"/>
-      <binaryContainers name="binary_container_2"/>
     </configBuildOptions>
   </configuration>
   <configuration name="Emulation-HW" id="com.xilinx.sdx.opencl.config.hw_emu.51222354" dirty="true">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" target="hw_emu">
       <binaryContainers name="binary_container_1"/>
-      <binaryContainers name="binary_container_2"/>
     </configBuildOptions>
   </configuration>
   <configuration name="System" id="com.xilinx.sdx.opencl.config.hw.1316292164" dirty="true">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" target="hw">
       <binaryContainers name="binary_container_1"/>
-      <binaryContainers name="binary_container_2"/>
     </configBuildOptions>
   </configuration>
 </openclProject:OpenCLProject>

@@ -96,7 +96,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <vector>
 #include "xcl2.hpp"
 
-#define NDDR_BANKS 1
+#define NDDR_BANKS 3
 #define OUTPUT_VECTOR_SIZE 1024*1024 // 1 MB
 #define BUCKET_WIDTH 64 //64 now for test purposes //512 // KB--> 1024*512/32 = 131072 values picked as best in the paper
 #define MAX_BUCKET_INDEX_VAL_SIZE BUCKET_WIDTH*BUCKET_WIDTH // not likely since sparcity
@@ -236,6 +236,7 @@ int main(int argc, char** argv) {
     /* Write input buffer */
     /* Map input buffer for PCIe write */
     unsigned char *map_input_buffer0;
+    unsigned char *map_indexes_buffer;
     OCL_CHECK(err, map_input_buffer0 = (unsigned char *) q.enqueueMapBuffer(*(buffer[0]),
 							                                 CL_FALSE,
                             							     CL_MAP_WRITE_INVALIDATE_REGION,
@@ -244,11 +245,20 @@ int main(int argc, char** argv) {
                             							     NULL,
 							                                 NULL,
                             							     &err));
+    OCL_CHECK(err, map_indexes_buffer = (unsigned char *) q.enqueueMapBuffer(*(buffer[1]),
+    							                                 CL_FALSE,
+                                							     CL_MAP_WRITE_INVALIDATE_REGION,
+                                							     0,
+                                   							     globalbuffersize,
+                                							     NULL,
+    							                                 NULL,
+                                							     &err));
     OCL_CHECK(err, err = q.finish());
 
     /* prepare data to be written to the device */
     for(size_t i = 0; i<globalbuffersize; i++) {
-        map_input_buffer0[i] = input_host[i];
+        map_input_buffer0[i] = inputVals[i];
+        map_indexes_buffer[i] = indexes[i];
     }
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[0]),
                 				  map_input_buffer0));
@@ -278,7 +288,7 @@ int main(int argc, char** argv) {
     #endif
 
     /* Set the kernel arguments */
-    OCL_CHECK(err, cl::Kernel krnl_global_bandwidth(program, "N_stage_Adders", &err));
+    OCL_CHECK(err, cl::Kernel krnl_global_bandwidth(program, "top_kernel", &err));
     int arg_index = 0;
     int buffer_index = 0;
 
@@ -302,7 +312,7 @@ int main(int argc, char** argv) {
 
     /* Copy results back from OpenCL buffer */
     unsigned char *map_output_buffer0;
-    OCL_CHECK(err, map_output_buffer0 = (unsigned char *) q.enqueueMapBuffer(*(buffer[1]),
+    OCL_CHECK(err, map_output_buffer0 = (unsigned char *) q.enqueueMapBuffer(*(buffer[2]),
                             							      CL_FALSE,
                             							      CL_MAP_READ,
                             							      0,
@@ -315,34 +325,13 @@ int main(int argc, char** argv) {
     std::cout << "Kernel Duration..." << nsduration << " ns" <<std::endl;
 
     /* Check the results of output0 */
-    for (size_t i = 0; i < globalbuffersize; i++) {
-      if (map_output_buffer0[i] != (i/8)+1 )//(input_host[i] + 1) % 256)
+    for (size_t i = 0; i < OUTPUT_VECTOR_SIZE; i++) {
+      if (map_output_buffer0[i] != sums_sw[i] )//(input_host[i] + 1) % 256)
     	  {
-            printf("ERROR : kernel0 failed to copy entry %zu input %i output %i\n",i,input_host[i], map_output_buffer0[i]);
+            printf("ERROR : kernel0 failed to copy entry %zu input %i output %i\n",i,sums_sw[i], map_output_buffer0[i]);
             return EXIT_FAILURE;
         }
     }
-    #if NDDR_BANKS == 3
-        unsigned char *map_output_buffer1;
-  	    OCL_CHECK(err, map_output_buffer1 = (unsigned char *) q.enqueueMapBuffer(*(buffer[2]),
-								                                  CL_FALSE,
-                                                				  CL_MAP_READ,
-                                								  0,
-                                								  globalbuffersize,
-                                								  NULL,
-                                								  NULL,
-                                								  &err));
-        OCL_CHECK(err, err = q.finish());
-
-        /* Check the results of output1 */
-        for (size_t i = 0; i < globalbuffersize; i++) {
-            if (map_output_buffer1[i] != input_host[i]) {
-                printf("ERROR : kernel1 failed to copy entry %zu input %i output %i\n", i, input_host[i], map_output_buffer1[i]);
-                return EXIT_FAILURE;
-            }
-        }
-    #endif
-
     #if NDDR_BANKS > 3
         unsigned char *map_output_buffer1;
   	    OCL_CHECK(err, map_output_buffer1 = (unsigned char *) q.enqueueMapBuffer(*(buffer[3]),

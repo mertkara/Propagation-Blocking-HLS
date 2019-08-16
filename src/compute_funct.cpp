@@ -68,3 +68,39 @@ struct Type512 {
   }
 
 } ;
+const int ArrSize = 256 ;
+
+static void read_input(LineT* inp, int inpBegin, LineT buffer[ArrSize], int lineCnt) {
+
+ mem_rd: for (int i=0; i < lineCnt; ++i) {
+#pragma HLS pipeline II=1
+    buffer[i] = inp[inpBegin+i] ;
+  }
+}
+
+
+extern "C" {
+
+  void top_kernel(LineT* inputVals, LineT* indexVals, LineT* outputSums, unsigned long blockCnt) {
+#pragma HLS INTERFACE m_axi port=inputVals offset=slave bundle=gmem0
+#pragma HLS INTERFACE m_axi port=indexVals offset=slave bundle=gmem1
+#pragma HLS INTERFACE m_axi port=outputSums offset=slave bundle=gmem2
+#pragma HLS INTERFACE s_axilite port=inputVals bundle=control
+#pragma HLS INTERFACE s_axilite port=indexVals bundle=control
+#pragma HLS INTERFACE s_axilite port=outputSums bundle=control
+
+#pragma HLS INTERFACE s_axilite port=blockCnt bundle=control
+#pragma HLS INTERFACE s_axilite port=return bundle=control
+
+	LineT inputValueStream[ArrSize];
+	LineT inputIndexStream[ArrSize];
+//#pragma HLS array_partition variable=buffers complete dim=1
+
+	read_input(inputVals, 0, inputValueStream, ArrSize);
+
+    rcw_pipeline(input0, output0, blockCnt);
+    rcw_pipeline(input1, output1, blockCnt);
+
+  }
+
+}
