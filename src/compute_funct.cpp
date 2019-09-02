@@ -1,87 +1,79 @@
 #include <hls_stream.h>
-#include <ap_int.h>
+//#include <ap_int.h>
 #include <iostream>
 #include <string>
 #include <sstream>
-
-#define BURST_LINE_CNT 32
-#define VECTOR_SIZE 16
-
-using std::cout ;
-using std::endl ;
+#include "types.h"
 
 
-typedef Type512 LineT ;
-typedef ap_uint<32> IndexT ;
-typedef ap_uint<32> ValueT ;
-// The following class is to get bit counts of types in compile time
-template <typename VT>
-class BitCnt {
 
-public:
-  static short get() {
-#pragma HLS INLINE
-    return 64 ; // default -- not to be used
-  }
-} ;
+const int ArrSize = 8 ;
 
-template<>
-class BitCnt<ap_uint<32> > {
-
-public:
-  static inline short get() {
-#pragma HLS INLINE
-    return 32 ;
-  }
-} ;
-
-template<>
-class BitCnt<ap_uint<16> > {
-
-public:
-  static inline short get() {
-#pragma HLS INLINE
-    return 16 ;
-  }
-} ;
-
-
-struct Type512 {
-  ap_uint<512> data ;
-  ValueT get(int idx) {
-    // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE
-    return data((idx+1)*BitCnt<ValueT>::get()-1,idx*BitCnt<ValueT>::get()) ;
-  }
-
-  void set(int idx, ValueT val) {
-    // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE
-    data((idx+1)*BitCnt<ValueT>::get()-1, idx*BitCnt<ValueT>::get()) = val ;
-  }
-
-  string str() {
-    std::ostringstream oss ;
-    for (int vi=0; vi < VECTOR_SIZE; ++vi)
-      oss << get(vi) << " " ;
-    return oss.str() ;
-  }
-
-} ;
-const int ArrSize = 256 ;
-
-static void read_input(LineT* inp, int inpBegin, LineT buffer[ArrSize], int lineCnt) {
+static void read_to_BRAM(LineT* inp, int inpBegin, ContribPair buffer[ArrSize*8], int lineCnt) {
 
  mem_rd: for (int i=0; i < lineCnt; ++i) {
+#pragma HLS pipeline II=1
+	 LineT line = inp[inpBegin+i];
+	 for(int j = 0; j < 8; j++)
+	#pragma HLS unroll factor=8 skip_exit_check
+		 buffer[i*8+j] = line.get(j) ;
+  }
+}/*
+static void init_zeroBRAM(ValueT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
+
+ mem_init: for (int i=0; i < BUCKET_WIDTH; ++i) {
+#pragma HLS pipeline II=1
+    buffer[i] = 0 ;
+  }
+}*/
+static void read_output_to_BRAM(ValueT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
+
+ mem_rd_output: for (int i=0; i < BUCKET_WIDTH; ++i) {
 #pragma HLS pipeline II=1
     buffer[i] = inp[inpBegin+i] ;
   }
 }
+static void write_output_to_GMEM(ValueT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
 
+ mem_wr_output: for (int i=0; i < BUCKET_WIDTH; ++i) {
+#pragma HLS pipeline II=1
+	 buffer[inpBegin+i] = inp[i]  ;
+  }
+}
+
+static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
+	IndexT lastAddr = -1;
+	ValueT lastVal = 0;
+	ContribPair pair;
+	IndexT index;
+	ValueT val;
+	ValueT currVal;
+//#pragma HLS pipeline II=1
+#pragma HLS inline off
+	comp: for(int i = 0; i < lineCnt*8; i++){
+#pragma HLS pipeline II=1
+#pragma HLS dependence variable=arr distance=2 inter true
+
+			pair = inputs[i] ; // read the current address
+			index = pair.indexData;
+			val = pair.valData;
+			if (index == lastAddr) {
+				currVal = lastVal ; // pipeline forwarding
+			}
+			else {
+				currVal = arr[index % BUCKET_WIDTH];
+			}
+
+			arr[index % BUCKET_WIDTH] = currVal + val; // update the current value and store it
+
+			lastAddr = index ;
+			lastVal = currVal + val ;
+		}
+	}
 
 extern "C" {
 
-  void top_kernel(LineT* inputVals, LineT* indexVals, LineT* outputSums, unsigned long blockCnt) {
+  void top_kernel(LineT* inputVals, LineT* indexVals, ValueT* outputSums, unsigned long blockCnt) {
 #pragma HLS INTERFACE m_axi port=inputVals offset=slave bundle=gmem0
 #pragma HLS INTERFACE m_axi port=indexVals offset=slave bundle=gmem1
 #pragma HLS INTERFACE m_axi port=outputSums offset=slave bundle=gmem2
@@ -92,15 +84,15 @@ extern "C" {
 #pragma HLS INTERFACE s_axilite port=blockCnt bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
-	LineT inputValueStream[ArrSize];
-	LineT inputIndexStream[ArrSize];
+	ContribPair inputArray[ArrSize*8];
+	ValueT outputArray[BUCKET_WIDTH];
 //#pragma HLS array_partition variable=buffers complete dim=1
-
-	read_input(inputVals, 0, inputValueStream, ArrSize);
-
-    rcw_pipeline(input0, output0, blockCnt);
-    rcw_pipeline(input1, output1, blockCnt);
+	for(int i = 0; i < NUM_OF_BUCKETS; i++){
+		read_to_BRAM(inputVals, i*8, inputArray, 8);
+		read_output_to_BRAM(outputSums, i*BUCKET_WIDTH, outputArray);
+		compute_kernel(inputArray,outputArray,8);
+		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH, outputSums);
+	}
 
   }
-
 }

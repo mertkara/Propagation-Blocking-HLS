@@ -88,36 +88,18 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *  used similar to other examples in CLI flow, extra setup is not needed.
 *
 *********************************************************************************************/
+#include <xcl2.hpp>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <vector>
-#include "xcl2.hpp"
 
-#define NDDR_BANKS 3
-#define OUTPUT_VECTOR_SIZE 1024*1024 // 1 MB
-#define BUCKET_WIDTH 64 //64 now for test purposes //512 // KB--> 1024*512/32 = 131072 values picked as best in the paper
-#define MAX_BUCKET_INDEX_VAL_SIZE BUCKET_WIDTH*BUCKET_WIDTH // not likely since sparcity
-
-//bucket densities for testing
-#define EMPTY_BUCKET 0
-#define LOW_DENSE_BUCKET 1
-#define MEDIUM_DENSE_BUCKET 2
-#define FULL_BUCKET 3
-#define NUM_OF_TEST_SIZE 2048
-
-typedef ap_uint<32> IndexT ;
-typedef ap_uint<32> ValueT ;
-
-typedef vector<ValueT, aligned_allocator<ValueT>> ValueVec;
-typedef vector<IndexT, aligned_allocator<IndexT>> IndexVec;
-
-
-
+#include "types.h"
 #include <string>
-using std::string ;
+
+
+
 string getBinaryFileName(char* xcl_mode) {
 
   std::string binaryFile = "/home/mkara/tutorial/prop_block/" ;
@@ -131,6 +113,10 @@ string getBinaryFileName(char* xcl_mode) {
 
   return binaryFile ;
 }
+
+typedef vector<ValueT, aligned_allocator<ValueT>> ValueVec;
+typedef vector<IndexT, aligned_allocator<IndexT>> IndexVec;
+typedef vector<LineT, aligned_allocator<LineT>> LineVector;
 
 int main(int argc, char** argv) {
 
@@ -166,18 +152,26 @@ int main(int argc, char** argv) {
     OCL_CHECK(err, cl::Program program(context, devices, bins, NULL, &err));
 
 	/* Initialize Buffers */
-    ValueVec inputVals(NUM_OF_TEST_SIZE);
-    IndexVec indexes(NUM_OF_TEST_SIZE);
+    LineVector inputVec(128*8); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
     ValueVec sums(OUTPUT_VECTOR_SIZE, 0);
     ValueVec sums_sw(OUTPUT_VECTOR_SIZE, 0);
 
-    for(int i = 0; i < NUM_OF_TEST_SIZE ; i++) {
-        inputVals[i] = 3;
-		indexes[i] = (int)(i/BUCKET_WIDTH) + i % 5;
-		sums_sw[(int)(i / BUCKET_WIDTH) + i % 5] += inputVals[i];
-    }
+    for(uint i = 0; i < 128*8*8; i++) {
+    	ContribPair inp;
+    	inp.indexData = i;
+    	//std::cout << inp.indexData;//(i < OUTPUT_VECTOR_SIZE) ? i : ( OUTPUT_VECTOR_SIZE-1);
+    	inp.valData = 1; //arbitrary value for now
+        inputVec[i/8].set(i%8, inp);
+		sums_sw[inp.indexData] += inp.valData;
+		if(i<16)    { std::cout << "..... Came SO FAR " <<i <<inp.indexData<< " ,val =  "<<inp.valData<< std::endl ;
+			for(int j = 0; j < 8; j++){
+				ContribPair tst = inputVec[i/8].get(j%8);
+				std::cout <<"i: "  << i <<", index: "<< tst.indexData<< " ,val =  "<<tst.valData<< std::endl ;
+		}
+    }}
 
     short ddr_banks = NDDR_BANKS;
+    std::cout << "..... Came SO FAR" << std::endl ;
 
     /* Index for the ddr pointer array: 4=4, 3=3, 2=2, 1=2 */
     char num_buffers = ddr_banks;
@@ -210,6 +204,7 @@ int main(int argc, char** argv) {
                     			   globalbuffersize,
             		    		   &ext_buffer[i],
 			                	   &err);
+
             if(err != CL_SUCCESS) {
                 printf("Error: Failed to allocate buffer in DDR bank %zu\n", globalbuffersize);
                 return EXIT_FAILURE;
@@ -227,7 +222,6 @@ int main(int argc, char** argv) {
         			            	NULL,
                     				&err));
     #endif
-
     cl_ulong num_blocks = globalbuffersize /64;
     double dbytes = globalbuffersize;
     double dmbytes = dbytes / (((double)1024) * ((double)1024));
@@ -235,9 +229,8 @@ int main(int argc, char** argv) {
 
     /* Write input buffer */
     /* Map input buffer for PCIe write */
-    unsigned char *map_input_buffer0;
-    unsigned char *map_indexes_buffer;
-    OCL_CHECK(err, map_input_buffer0 = (unsigned char *) q.enqueueMapBuffer(*(buffer[0]),
+    LineT *map_input_buffer0;
+    OCL_CHECK(err, map_input_buffer0 = (LineT*) q.enqueueMapBuffer(*(buffer[0]),
 							                                 CL_FALSE,
                             							     CL_MAP_WRITE_INVALIDATE_REGION,
                             							     0,
@@ -245,25 +238,18 @@ int main(int argc, char** argv) {
                             							     NULL,
 							                                 NULL,
                             							     &err));
-    OCL_CHECK(err, map_indexes_buffer = (unsigned char *) q.enqueueMapBuffer(*(buffer[1]),
-    							                                 CL_FALSE,
-                                							     CL_MAP_WRITE_INVALIDATE_REGION,
-                                							     0,
-                                   							     globalbuffersize,
-                                							     NULL,
-    							                                 NULL,
-                                							     &err));
     OCL_CHECK(err, err = q.finish());
+    std::cout << "..... Came SO FAR" << std::endl ;
 
     /* prepare data to be written to the device */
-    for(size_t i = 0; i<globalbuffersize; i++) {
-        map_input_buffer0[i] = inputVals[i];
-        map_indexes_buffer[i] = indexes[i];
+    for(size_t i = 0; i<128*8; i++) {
+        map_input_buffer0[i] = inputVec[i];
     }
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[0]),
                 				  map_input_buffer0));
 
     OCL_CHECK(err, err = q.finish());
+
 
     #if NDDR_BANKS > 3
         unsigned char *map_input_buffer1;
@@ -301,6 +287,7 @@ int main(int argc, char** argv) {
        OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, *(buffer[buffer_index++])));
     #endif
     OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, num_blocks));
+    printf("Kernel args set...");
 
     unsigned long nsduration;
     cl::Event event;
@@ -311,8 +298,9 @@ int main(int argc, char** argv) {
     nsduration = OCL_CHECK(err, event.getProfilingInfo<CL_PROFILING_COMMAND_END>(&err)) - OCL_CHECK(err, event.getProfilingInfo<CL_PROFILING_COMMAND_START>(&err));
 
     /* Copy results back from OpenCL buffer */
-    unsigned char *map_output_buffer0;
-    OCL_CHECK(err, map_output_buffer0 = (unsigned char *) q.enqueueMapBuffer(*(buffer[2]),
+    ValueT *map_output_buffer0;
+
+    OCL_CHECK(err, map_output_buffer0 = (ValueT *) q.enqueueMapBuffer(*(buffer[2]),
                             							      CL_FALSE,
                             							      CL_MAP_READ,
                             							      0,
@@ -325,10 +313,10 @@ int main(int argc, char** argv) {
     std::cout << "Kernel Duration..." << nsduration << " ns" <<std::endl;
 
     /* Check the results of output0 */
-    for (size_t i = 0; i < OUTPUT_VECTOR_SIZE; i++) {
+    for (int i = 0; i < OUTPUT_VECTOR_SIZE; i++) {
       if (map_output_buffer0[i] != sums_sw[i] )//(input_host[i] + 1) % 256)
     	  {
-            printf("ERROR : kernel0 failed to copy entry %zu input %i output %i\n",i,sums_sw[i], map_output_buffer0[i]);
+    	  	  std::cout << "ERROR : kernel0 failed to copy entry "<< i <<" should be "<<  sums_sw[i] << "but hw res is " <<map_output_buffer0[i]<< std::endl ;
             return EXIT_FAILURE;
         }
     }

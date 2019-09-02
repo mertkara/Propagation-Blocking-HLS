@@ -20,12 +20,27 @@
 							<targetPlatform id="com.xilinx.sdx.opencl.config.sw_emu.1847846692..1177644663" name=""/>
 							<builder buildPath="${workspace_loc:/prop_block}/Emulation-SW" enableAutoBuild="true" id="com.xilinx.sdx.opencl.make_builder.1313430044" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Xilinx SDx OpenCL Builder" superClass="com.xilinx.sdx.opencl.make_builder"/>
 							<tool id="com.xilinx.sdx.opencl.toolchain.xocc_compiler.356124835" name="SDx XOCC Kernel Compiler" superClass="com.xilinx.sdx.opencl.toolchain.xocc_compiler">
+								<option id="com.xilinx.sdx.opencl.toolchain.xocc_compiler.other_flags.979456573" name="Other flags" superClass="com.xilinx.sdx.opencl.toolchain.xocc_compiler.other_flags" valueType="stringList">
+									<listOptionValue builtIn="false" value="--max_memory_ports all"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem0:bank0"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem1:bank1"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem2:bank2"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem3:bank3"/>
+								</option>
 								<inputType id="com.xilinx.sdx.opencl.toolchain.xocc_compiler.input.cl.298027007" name="OpenCL files" superClass="com.xilinx.sdx.opencl.toolchain.xocc_compiler.input.cl"/>
 							</tool>
-							<tool id="com.xilinx.sdx.opencl.toolchain.xocc_linker.123699788" name="SDx XOCC Kernel Linker" superClass="com.xilinx.sdx.opencl.toolchain.xocc_linker"/>
+							<tool id="com.xilinx.sdx.opencl.toolchain.xocc_linker.123699788" name="SDx XOCC Kernel Linker" superClass="com.xilinx.sdx.opencl.toolchain.xocc_linker">
+								<option id="com.xilinx.sdx.opencl.toolchain.xocc_linker.other_flags.348726948" name="Other flags" superClass="com.xilinx.sdx.opencl.toolchain.xocc_linker.other_flags" valueType="stringList">
+									<listOptionValue builtIn="false" value="--max_memory_ports all"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem0:bank0"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem1:bank1"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem2:bank2"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem3:bank3"/>
+								</option>
+							</tool>
 							<tool id="com.xilinx.sdx.opencl.emconfigutil.247998522" name="emconfigutil" superClass="com.xilinx.sdx.opencl.emconfigutil"/>
 							<tool id="com.xilinx.sdx.opencl.toolchain.gcc_compiler.sw_emu.debug.1859369170" name="SDx GCC Host Compiler (x86_64)" superClass="com.xilinx.sdx.opencl.toolchain.gcc_compiler.sw_emu.debug">
-								<option id="com.xilinx.sdx.opencl.cpp.compiler.include.paths.1494585041" superClass="com.xilinx.sdx.opencl.cpp.compiler.include.paths" valueType="includePath">
+								<option id="com.xilinx.sdx.opencl.cpp.compiler.include.paths.1494585041" name="Include paths (-I)" superClass="com.xilinx.sdx.opencl.cpp.compiler.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="${env_var:XILINX_SDX}/runtime/include/1_2/"/>
 									<listOptionValue builtIn="false" value="${workspace_loc:/${ProjName}/libs/xcl2/}"/>
 									<listOptionValue builtIn="false" value="${env_var:XILINX_VIVADO_HLS}/include/"/>
@@ -63,11 +78,30 @@
 							<targetPlatform id="com.xilinx.sdx.opencl.config.hw_emu.51222354..1357218748" name=""/>
 							<builder buildPath="${workspace_loc:/prop_block}/Emulation-HW" enableAutoBuild="true" id="com.xilinx.sdx.opencl.make_builder.866544040" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Xilinx SDx OpenCL Builder" superClass="com.xilinx.sdx.opencl.make_builder"/>
 							<tool id="com.xilinx.sdx.opencl.toolchain.xocc_compiler.1090245185" name="SDx XOCC Kernel Compiler" superClass="com.xilinx.sdx.opencl.toolchain.xocc_compiler">
+								<option id="com.xilinx.sdx.opencl.toolchain.xocc_compiler.other_flags.1442633501" name="Other flags" superClass="com.xilinx.sdx.opencl.toolchain.xocc_compiler.other_flags" valueType="stringList">
+									<listOptionValue builtIn="false" value="--max_memory_ports all"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem0:bank0"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem1:bank1"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem2:bank2"/>
+								</option>
 								<inputType id="com.xilinx.sdx.opencl.toolchain.xocc_compiler.input.cl.1901779349" name="OpenCL files" superClass="com.xilinx.sdx.opencl.toolchain.xocc_compiler.input.cl"/>
 							</tool>
-							<tool id="com.xilinx.sdx.opencl.toolchain.xocc_linker.549781987" name="SDx XOCC Kernel Linker" superClass="com.xilinx.sdx.opencl.toolchain.xocc_linker"/>
+							<tool id="com.xilinx.sdx.opencl.toolchain.xocc_linker.549781987" name="SDx XOCC Kernel Linker" superClass="com.xilinx.sdx.opencl.toolchain.xocc_linker">
+								<option id="com.xilinx.sdx.opencl.toolchain.xocc_linker.other_flags.1737008242" name="Other flags" superClass="com.xilinx.sdx.opencl.toolchain.xocc_linker.other_flags" valueType="stringList">
+									<listOptionValue builtIn="false" value="--max_memory_ports all "/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem0:bank0"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem1:bank1"/>
+									<listOptionValue builtIn="false" value="--sp top_kernel_1.m_axi_gmem2:bank2"/>
+								</option>
+							</tool>
 							<tool id="com.xilinx.sdx.opencl.emconfigutil.1017401362" name="emconfigutil" superClass="com.xilinx.sdx.opencl.emconfigutil"/>
 							<tool id="com.xilinx.sdx.opencl.toolchain.gcc_compiler.hw_emu.debug.635606877" name="SDx GCC Host Compiler (x86_64)" superClass="com.xilinx.sdx.opencl.toolchain.gcc_compiler.hw_emu.debug">
+								<option id="gnu.cpp.compiler.option.dialect.std.334602142" name="Language standard" superClass="gnu.cpp.compiler.option.dialect.std" value="gnu.cpp.compiler.dialect.default" valueType="enumerated"/>
+								<option id="com.xilinx.sdx.opencl.cpp.compiler.include.paths.2091520662" name="Include paths (-I)" superClass="com.xilinx.sdx.opencl.cpp.compiler.include.paths" valueType="includePath">
+									<listOptionValue builtIn="false" value="${env_var:XILINX_SDX}/runtime/include/1_2/"/>
+									<listOptionValue builtIn="false" value="${env_var:XILINX_VIVADO_HLS}/include/"/>
+									<listOptionValue builtIn="false" value="${workspace_loc:/${ProjName}/libs/xcl2/}"/>
+								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.592533032" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="com.xilinx.sdx.opencl.toolchain.gcc_linker.hw.982797375" name="SDx GCC Host Linker (x86_64)" superClass="com.xilinx.sdx.opencl.toolchain.gcc_linker.hw">

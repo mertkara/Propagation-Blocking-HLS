@@ -1,18 +1,44 @@
 <?xml version="1.0" encoding="ASCII"?>
 <openclProject:OpenCLProject xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:openclProject="http://www.xilinx.com/openclproject" name="prop_block" location="/home/mkara/tutorial/prop_block" platform="/opt/Xilinx/SDx/2018.2/platforms/xilinx_vcu1525_dynamic_5_1/xilinx_vcu1525_dynamic_5_1.xpfm" platformUID="xilinx:vcu1525:dynamic:5.1" systemProject="prop_block_system" sysConfig="config0_0" cpu="" cpuInstance="" os="linux">
-  <configuration name="Emulation-SW" id="com.xilinx.sdx.opencl.config.sw_emu.1847846692" dirty="true">
+  <configuration name="Emulation-SW" id="com.xilinx.sdx.opencl.config.sw_emu.1847846692">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" reportType="None">
-      <binaryContainers name="binary_container_1"/>
+      <binaryContainers name="binary_container_1">
+        <kernels name="top_kernel" sourceFile="src/compute_funct.cpp" maxMemoryPorts="true">
+          <computeUnits name="top_kernel_1"/>
+        </kernels>
+      </binaryContainers>
     </configBuildOptions>
+    <lastBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" reportType="None">
+      <binaryContainers name="binary_container_1">
+        <kernels name="top_kernel" sourceFile="src/compute_funct.cpp" maxMemoryPorts="true">
+          <computeUnits name="top_kernel_1"/>
+        </kernels>
+      </binaryContainers>
+    </lastBuildOptions>
   </configuration>
-  <configuration name="Emulation-HW" id="com.xilinx.sdx.opencl.config.hw_emu.51222354" dirty="true">
+  <configuration name="Emulation-HW" id="com.xilinx.sdx.opencl.config.hw_emu.51222354">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" target="hw_emu">
-      <binaryContainers name="binary_container_1"/>
+      <binaryContainers name="binary_container_1">
+        <kernels name="top_kernel" sourceFile="src/compute_funct.cpp" maxMemoryPorts="true">
+          <computeUnits name="top_kernel_1"/>
+        </kernels>
+      </binaryContainers>
     </configBuildOptions>
+    <lastBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" target="hw_emu">
+      <binaryContainers name="binary_container_1">
+        <kernels name="top_kernel" sourceFile="src/compute_funct.cpp" maxMemoryPorts="true">
+          <computeUnits name="top_kernel_1"/>
+        </kernels>
+      </binaryContainers>
+    </lastBuildOptions>
   </configuration>
   <configuration name="System" id="com.xilinx.sdx.opencl.config.hw.1316292164" dirty="true">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" target="hw">
-      <binaryContainers name="binary_container_1"/>
+      <binaryContainers name="binary_container_1">
+        <kernels name="top_kernel" sourceFile="src/compute_funct.cpp" maxMemoryPorts="true">
+          <computeUnits name="top_kernel_1"/>
+        </kernels>
+      </binaryContainers>
     </configBuildOptions>
   </configuration>
 </openclProject:OpenCLProject>
