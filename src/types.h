@@ -80,7 +80,7 @@ struct Type512 {
 	ap_uint<512> data;
   ContribPair get(int idx) {
     // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE
+#pragma HLS INLINE off
 	  ContribPair res;
 	  ap_uint<64> pair = data((idx+1)*64-1,idx*64);
 	  res.indexData = pair(31,0);
@@ -107,33 +107,29 @@ struct Type512 {
 
 } ;
 
-//TYPE DEFINITIONS AND STRUCTS
-typedef Type512 LineT ;
-
-
-
-
-/*
 struct Type512_output {
   ap_uint<512> data ;
   ValueT get(int idx) {
     // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE
-    return data((idx+1)*BitCnt<ContribPair>::get()-1,idx*BitCnt<ContribPair>::get()) ;
+#pragma HLS INLINE off
+    return data((idx+1)*BitCnt<ValueT>::get()-1,idx*BitCnt<ValueT>::get()) ;
   }
 
-  void set(int idx, ContribPair val) {
+  void set(int idx, ValueT val) {
     // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE
-    data((idx+1)*BitCnt<ContribPair>::get()-1, idx*BitCnt<ContribPair>::get()) = val ;
+#pragma HLS INLINE off
+    data((idx+1)*BitCnt<ValueT>::get()-1, idx*BitCnt<ValueT>::get()) = val ;
   }
 
-  string str() {
+/*  string str() {
     std::ostringstream oss ;
     for (int vi=0; vi < VECTOR_SIZE; ++vi)
       oss << get(vi) << " " ;
     return oss.str() ;
-  }
+  }*/
 
 } ;
-*/
+
+//TYPE DEFINITIONS AND STRUCTS
+typedef Type512 LineT ;
+typedef Type512_output outLineT ;

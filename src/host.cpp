@@ -117,6 +117,7 @@ string getBinaryFileName(char* xcl_mode) {
 typedef vector<ValueT, aligned_allocator<ValueT>> ValueVec;
 typedef vector<IndexT, aligned_allocator<IndexT>> IndexVec;
 typedef vector<LineT, aligned_allocator<LineT>> LineVector;
+typedef vector<outLineT, aligned_allocator<outLineT>> outLineVector;
 
 int main(int argc, char** argv) {
 
@@ -153,8 +154,8 @@ int main(int argc, char** argv) {
 
 	/* Initialize Buffers */
     LineVector inputVec(128*8); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
-    ValueVec sums(OUTPUT_VECTOR_SIZE, 0);
-    ValueVec sums_sw(OUTPUT_VECTOR_SIZE, 0);
+    outLineVector sums(OUTPUT_VECTOR_SIZE/16);
+    outLineVector sums_sw(OUTPUT_VECTOR_SIZE/16);
 
     for(uint i = 0; i < 128*8*8; i++) {
     	ContribPair inp;
@@ -162,7 +163,7 @@ int main(int argc, char** argv) {
     	//std::cout << inp.indexData;//(i < OUTPUT_VECTOR_SIZE) ? i : ( OUTPUT_VECTOR_SIZE-1);
     	inp.valData = 1; //arbitrary value for now
         inputVec[i/8].set(i%8, inp);
-		sums_sw[inp.indexData] += inp.valData;
+		sums_sw[inp.indexData/16].set(inp.indexData%16,inp.valData + sums_sw[inp.indexData/16].get(inp.indexData%16));
 		if(i<16)    { std::cout << "..... Came SO FAR " <<i <<inp.indexData<< " ,val =  "<<inp.valData<< std::endl ;
 			for(int j = 0; j < 8; j++){
 				ContribPair tst = inputVec[i/8].get(j%8);
@@ -298,9 +299,9 @@ int main(int argc, char** argv) {
     nsduration = OCL_CHECK(err, event.getProfilingInfo<CL_PROFILING_COMMAND_END>(&err)) - OCL_CHECK(err, event.getProfilingInfo<CL_PROFILING_COMMAND_START>(&err));
 
     /* Copy results back from OpenCL buffer */
-    ValueT *map_output_buffer0;
+    outLineT *map_output_buffer0;
 
-    OCL_CHECK(err, map_output_buffer0 = (ValueT *) q.enqueueMapBuffer(*(buffer[2]),
+    OCL_CHECK(err, map_output_buffer0 = (outLineT *) q.enqueueMapBuffer(*(buffer[2]),
                             							      CL_FALSE,
                             							      CL_MAP_READ,
                             							      0,
@@ -313,10 +314,11 @@ int main(int argc, char** argv) {
     std::cout << "Kernel Duration..." << nsduration << " ns" <<std::endl;
 
     /* Check the results of output0 */
-    for (int i = 0; i < OUTPUT_VECTOR_SIZE; i++) {
-      if (map_output_buffer0[i] != sums_sw[i] )//(input_host[i] + 1) % 256)
+    for (int i = 0; i < OUTPUT_VECTOR_SIZE/16; i++) {
+    	for(int j = 0; j <16;j++)
+    		if (map_output_buffer0[i].get(j) != sums_sw[i].get(j) )//(input_host[i] + 1) % 256)
     	  {
-    	  	  std::cout << "ERROR : kernel0 failed to copy entry "<< i <<" should be "<<  sums_sw[i] << "but hw res is " <<map_output_buffer0[i]<< std::endl ;
+    	  	  std::cout << "ERROR : kernel0 failed to copy line "<< i <<" data" << j <<"; should be "<<  sums_sw[i].get(j) << "but hw res is " <<map_output_buffer0[i].get(j)<< std::endl ;
             return EXIT_FAILURE;
         }
     }

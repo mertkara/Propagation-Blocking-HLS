@@ -15,29 +15,29 @@ static void read_to_BRAM(LineT* inp, int inpBegin, ContribPair buffer[ArrSize*8]
 #pragma HLS pipeline II=1
 	 LineT line = inp[inpBegin+i];
 	 for(int j = 0; j < 8; j++)
-	#pragma HLS unroll factor=8 skip_exit_check
+	#pragma HLS unroll factor=2 skip_exit_check
 		 buffer[i*8+j] = line.get(j) ;
   }
-}/*
-static void init_zeroBRAM(ValueT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
-
- mem_init: for (int i=0; i < BUCKET_WIDTH; ++i) {
-#pragma HLS pipeline II=1
-    buffer[i] = 0 ;
-  }
-}*/
-static void read_output_to_BRAM(ValueT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
-
- mem_rd_output: for (int i=0; i < BUCKET_WIDTH; ++i) {
-#pragma HLS pipeline II=1
-    buffer[i] = inp[inpBegin+i] ;
-  }
 }
-static void write_output_to_GMEM(ValueT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
+static void read_output_to_BRAM(outLineT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
 
- mem_wr_output: for (int i=0; i < BUCKET_WIDTH; ++i) {
+	 mem_rd_output: for (int i=0; i < BUCKET_WIDTH/16; ++i) {
+	#pragma HLS pipeline II=1
+		 outLineT line = inp[inpBegin+i];
+		 for(int j = 0; j < 16; j++)
+		#pragma HLS unroll factor=2 skip_exit_check
+			 buffer[i*16+j] = line.get(j) ;
+	  }
+}
+static void write_output_to_GMEM(ValueT* inp, int inpBegin, outLineT buffer[BUCKET_WIDTH] ) {
+
+ mem_wr_output: for (int i=0; i < BUCKET_WIDTH; i = i + 16) {
 #pragma HLS pipeline II=1
-	 buffer[inpBegin+i] = inp[i]  ;
+	 outLineT line;
+	 for(int j = 0; j < 16; j++)
+#pragma HLS unroll factor=16 skip_exit_check
+		 line.set(j,inp[i+j]);
+	buffer[inpBegin+i/16] = line ;
   }
 }
 
@@ -48,8 +48,8 @@ static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
 	IndexT index;
 	ValueT val;
 	ValueT currVal;
-//#pragma HLS pipeline II=1
 #pragma HLS inline off
+
 	comp: for(int i = 0; i < lineCnt*8; i++){
 #pragma HLS pipeline II=1
 #pragma HLS dependence variable=arr distance=2 inter true
@@ -73,7 +73,7 @@ static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
 
 extern "C" {
 
-  void top_kernel(LineT* inputVals, LineT* indexVals, ValueT* outputSums, unsigned long blockCnt) {
+  void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, unsigned long blockCnt) {
 #pragma HLS INTERFACE m_axi port=inputVals offset=slave bundle=gmem0
 #pragma HLS INTERFACE m_axi port=indexVals offset=slave bundle=gmem1
 #pragma HLS INTERFACE m_axi port=outputSums offset=slave bundle=gmem2
@@ -89,9 +89,9 @@ extern "C" {
 //#pragma HLS array_partition variable=buffers complete dim=1
 	for(int i = 0; i < NUM_OF_BUCKETS; i++){
 		read_to_BRAM(inputVals, i*8, inputArray, 8);
-		read_output_to_BRAM(outputSums, i*BUCKET_WIDTH, outputArray);
+		read_output_to_BRAM(outputSums, i*BUCKET_WIDTH/16, outputArray);
 		compute_kernel(inputArray,outputArray,8);
-		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH, outputSums);
+		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
 	}
 
   }

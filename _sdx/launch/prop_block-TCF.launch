@@ -22,11 +22,23 @@
 <mapAttribute key="org.eclipse.debug.core.environmentVariables">
 <mapEntry key="ENHANCED_CPU_EM" value="true"/>
 <mapEntry key="LD_LIBRARY_PATH" value="${env_var:XILINX_SDX}/platforms/xilinx_vcu1525_dynamic_5_1/sw/lib/x86_64:${env_var:XILINX_SDX}/runtime/lib/x86_64:${env_var:XILINX_SDX}/lib/lnx64.o:${env_var:XILINX_SDX}/lib/lnx64.o/Default:${env_var:XILINX_SDX}/lnx64/tools/gcc/lib64"/>
+<mapEntry key="SDA_SKIP_KERNEL_DEBUG" value="true"/>
+<mapEntry key="XCL_EMULATION_MODE" value="sw_emu"/>
 <mapEntry key="XILINX_OPENCL" value="${env_var:XILINX_SDX}/"/>
 <mapEntry key="XILINX_SDACCEL" value="${env_var:XILINX_SDX}/"/>
 </mapAttribute>
 <booleanAttribute key="org.eclipse.tcf.debug.AttachChildren" value="false"/>
 <booleanAttribute key="org.eclipse.tcf.debug.DisconnectOnCtxExit" value="true"/>
+<stringAttribute key="org.eclipse.tcf.debug.LocalProgramFile" value="Emulation-SW/prop_block.exe"/>
+<stringAttribute key="org.eclipse.tcf.debug.PeerID" value="SDx_Server"/>
+<stringAttribute key="org.eclipse.tcf.debug.ProgramArguments" value=""/>
+<stringAttribute key="org.eclipse.tcf.debug.ProjectName" value="prop_block"/>
+<booleanAttribute key="org.eclipse.tcf.debug.RunLocalAgent" value="false"/>
+<booleanAttribute key="org.eclipse.tcf.debug.RunLocalServer" value="false"/>
+<booleanAttribute key="org.eclipse.tcf.debug.StopAtEntry" value="false"/>
+<booleanAttribute key="org.eclipse.tcf.debug.StopAtMain" value="false"/>
 <booleanAttribute key="org.eclipse.tcf.debug.UseContextFilter" value="false"/>
+<booleanAttribute key="org.eclipse.tcf.debug.UseLocalAgent" value="false"/>
 <booleanAttribute key="org.eclipse.tcf.debug.UseTerminal" value="true"/>
+<stringAttribute key="org.eclipse.tcf.debug.WorkingDirectory" value="/home/mkara/tutorial/prop_block/Emulation-SW/prop_block-TCF"/>
 </launchConfiguration>
