@@ -10,18 +10,19 @@ using std::endl;
 using std::string ;
 //PARAM DEFINITIONS
 #define NDDR_BANKS 3
-#define OUTPUT_VECTOR_SIZE 1024*8 // 1 MB
-#define BUCKET_WIDTH 64 //64 now for test purposes //512 // KB--> 1024*512/32 = 131072 values picked as best in the paper
+#define OUTPUT_VECTOR_SIZE 1024*1024 // 1 MB
+#define BUCKET_WIDTH 512 //in terms of elements
+#define OUTPUT_LINE_SIZE 16
+#define INPUT_LINE_SIZE 8 //Contrib Pairs
+#define LINES_PER_BUCKET BUCKET_WIDTH/16
+
 #define MAX_BUCKET_INDEX_VAL_SIZE BUCKET_WIDTH*BUCKET_WIDTH // not likely since sparcity
 
 #define NUM_OF_BUCKETS OUTPUT_VECTOR_SIZE/BUCKET_WIDTH // assume divisible for now
 
 //bucket densities for testing
-#define EMPTY_BUCKET 0
-#define LOW_DENSE_BUCKET 1
-#define MEDIUM_DENSE_BUCKET 2
-#define FULL_BUCKET 3
-#define NUM_OF_TEST_SIZE 2048
+#define BUCKET_DENSITY_FOR_TESTING 2
+#define NUM_OF_TEST_SIZE 2048*8
 
 #define BURST_LINE_CNT 32
 #define VECTOR_SIZE 8

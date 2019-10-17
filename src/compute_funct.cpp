@@ -7,40 +7,49 @@
 
 
 
-const int ArrSize = 8 ;
+const int ArrSize = 2048;
 
-static void read_to_BRAM(LineT* inp, int inpBegin, ContribPair buffer[ArrSize*8], int lineCnt) {
+static void read_to_BRAM(LineT* inp, int inpBegin, ContribPair *buffer, int lineCnt) {
 
- mem_rd: for (int i=0; i < lineCnt; ++i) {
+	mem_rd: for (int i=0; i < lineCnt; ++i) {
 #pragma HLS pipeline II=1
-	 LineT line = inp[inpBegin+i];
-	 for(int j = 0; j < 8; j++)
-	#pragma HLS unroll factor=2 skip_exit_check
-		 buffer[i*8+j] = line.get(j) ;
-  }
+		LineT line = inp[inpBegin+i];
+		for(int j = 0; j < 8; j++)
+#pragma HLS unroll factor=2 skip_exit_check
+			buffer[i*8+j] = line.get(j) ;
+	}
 }
 static void read_output_to_BRAM(outLineT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
 
-	 mem_rd_output: for (int i=0; i < BUCKET_WIDTH/16; ++i) {
-	#pragma HLS pipeline II=1
-		 outLineT line = inp[inpBegin+i];
-		 for(int j = 0; j < 16; j++)
-		#pragma HLS unroll factor=2 skip_exit_check
-			 buffer[i*16+j] = line.get(j) ;
-	  }
+	mem_rd_output: for (int i=0; i < BUCKET_WIDTH/16; ++i) {
+#pragma HLS pipeline II=1
+		outLineT line = inp[inpBegin+i];
+		for(int j = 0; j < 16; j++)
+#pragma HLS unroll factor=2 skip_exit_check
+			buffer[i*16+j] = line.get(j) ;
+	}
 }
 static void write_output_to_GMEM(ValueT* inp, int inpBegin, outLineT buffer[BUCKET_WIDTH] ) {
 
- mem_wr_output: for (int i=0; i < BUCKET_WIDTH; i = i + 16) {
+	mem_wr_output: for (int i=0; i < BUCKET_WIDTH; i = i + 16) {
 #pragma HLS pipeline II=1
-	 outLineT line;
-	 for(int j = 0; j < 16; j++)
-#pragma HLS unroll factor=16 skip_exit_check
-		 line.set(j,inp[i+j]);
-	buffer[inpBegin+i/16] = line ;
-  }
+		outLineT line;
+		for(int j = 0; j < 16; j++)
+{
+			#pragma HLS unroll factor=16 skip_exit_check
+			line.set(j,inp[i+j]);
+			std::cout << "index: " << i+j << ", val: " << inp[i+j] << std::endl;
+	}
+		buffer[inpBegin+i/16] = line ;
+	}
 }
-
+static void read_line_counts(ValueT *in, ValueT* array) {
+lineCount_rd:
+    for (int i = 0; i < NUM_OF_BUCKETS; i++) {
+       #pragma HLS PIPELINE II=1
+        array[i] = in[i];
+    }
+}
 static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
 	IndexT lastAddr = -1;
 	ValueT lastVal = 0;
@@ -54,45 +63,54 @@ static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
 #pragma HLS pipeline II=1
 #pragma HLS dependence variable=arr distance=2 inter true
 
-			pair = inputs[i] ; // read the current address
-			index = pair.indexData;
-			val = pair.valData;
-			if (index == lastAddr) {
-				currVal = lastVal ; // pipeline forwarding
-			}
-			else {
-				currVal = arr[index % BUCKET_WIDTH];
-			}
+		pair = inputs[i] ; // read the current address
+		index = pair.indexData;
+		val = pair.valData;
 
-			arr[index % BUCKET_WIDTH] = currVal + val; // update the current value and store it
-
-			lastAddr = index ;
-			lastVal = currVal + val ;
+		if (index == lastAddr) {
+			currVal = lastVal ; // pipeline forwarding
 		}
+		else {
+			currVal = arr[index % BUCKET_WIDTH];
+		}
+
+		arr[index % BUCKET_WIDTH] = currVal + val; // update the current value and store it
+		//std::cout << " val: " << lastVal << std::endl;
+
+		lastAddr = index ;
+		lastVal = currVal + val ;
 	}
+}
 
 extern "C" {
 
-  void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, unsigned long blockCnt) {
+void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, ValueT* lineCounts) {
 #pragma HLS INTERFACE m_axi port=inputVals offset=slave bundle=gmem0
+#pragma HLS INTERFACE m_axi port=lineCounts offset=slave bundle=gmem0
 #pragma HLS INTERFACE m_axi port=indexVals offset=slave bundle=gmem1
 #pragma HLS INTERFACE m_axi port=outputSums offset=slave bundle=gmem2
 #pragma HLS INTERFACE s_axilite port=inputVals bundle=control
 #pragma HLS INTERFACE s_axilite port=indexVals bundle=control
 #pragma HLS INTERFACE s_axilite port=outputSums bundle=control
 
-#pragma HLS INTERFACE s_axilite port=blockCnt bundle=control
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
-	ContribPair inputArray[ArrSize*8];
+
+	ContribPair inputArray[ArrSize];
 	ValueT outputArray[BUCKET_WIDTH];
-//#pragma HLS array_partition variable=buffers complete dim=1
+	ValueT lCounts[NUM_OF_BUCKETS];
+	//#pragma HLS array_partition variable=buffers complete dim=1
+	ValueT inputStreamStartingIndex = 0;
+
+	read_line_counts(lineCounts, lCounts);
+
 	for(int i = 0; i < NUM_OF_BUCKETS; i++){
-		read_to_BRAM(inputVals, i*8, inputArray, 8);
+    	read_to_BRAM(inputVals, inputStreamStartingIndex, inputArray, lCounts[i]);
 		read_output_to_BRAM(outputSums, i*BUCKET_WIDTH/16, outputArray);
-		compute_kernel(inputArray,outputArray,8);
+		compute_kernel(inputArray,outputArray,lCounts[i]);
 		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+		inputStreamStartingIndex += lCounts[i];
 	}
 
-  }
+}
 }

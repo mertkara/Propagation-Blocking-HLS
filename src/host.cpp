@@ -94,7 +94,7 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-
+#include <math.h>
 #include "types.h"
 #include <string>
 
@@ -118,6 +118,7 @@ typedef vector<ValueT, aligned_allocator<ValueT>> ValueVec;
 typedef vector<IndexT, aligned_allocator<IndexT>> IndexVec;
 typedef vector<LineT, aligned_allocator<LineT>> LineVector;
 typedef vector<outLineT, aligned_allocator<outLineT>> outLineVector;
+typedef vector<ValueT, aligned_allocator<ValueT>> lineCountsVector;
 
 int main(int argc, char** argv) {
 
@@ -125,6 +126,7 @@ int main(int argc, char** argv) {
         printf("Usage: %s\n", argv[0]);
         return EXIT_FAILURE;
     }
+    srand (time(NULL));
 
     cl_int err;
     std::vector<cl::Device> devices = xcl::get_xil_devices();
@@ -153,26 +155,50 @@ int main(int argc, char** argv) {
     OCL_CHECK(err, cl::Program program(context, devices, bins, NULL, &err));
 
 	/* Initialize Buffers */
-    LineVector inputVec(128*8); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
-    outLineVector sums(OUTPUT_VECTOR_SIZE/16);
-    outLineVector sums_sw(OUTPUT_VECTOR_SIZE/16);
+    LineVector inputVec(1024); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
+    outLineVector sums(NUM_OF_BUCKETS*LINES_PER_BUCKET);
+    outLineVector sums_sw(NUM_OF_BUCKETS*LINES_PER_BUCKET);
+    lineCountsVector lineCounts(NUM_OF_BUCKETS);
 
-    for(uint i = 0; i < 128*8*8; i++) {
-    	ContribPair inp;
-    	inp.indexData = i;
-    	//std::cout << inp.indexData;//(i < OUTPUT_VECTOR_SIZE) ? i : ( OUTPUT_VECTOR_SIZE-1);
-    	inp.valData = 1; //arbitrary value for now
-        inputVec[i/8].set(i%8, inp);
-		sums_sw[inp.indexData/16].set(inp.indexData%16,inp.valData + sums_sw[inp.indexData/16].get(inp.indexData%16));
-		if(i<16)    { std::cout << "..... Came SO FAR " <<i <<inp.indexData<< " ,val =  "<<inp.valData<< std::endl ;
-			for(int j = 0; j < 8; j++){
-				ContribPair tst = inputVec[i/8].get(j%8);
-				std::cout <<"i: "  << i <<", index: "<< tst.indexData<< " ,val =  "<<tst.valData<< std::endl ;
-		}
-    }}
+    int lastLineIndex = -1;
+    int neededVectorSize = 0;
+    for(uint i = 0; i < NUM_OF_BUCKETS; i++) { //should work fine ...
+    	int j;
+    	int numOfTestValues = rand() % (BUCKET_DENSITY_FOR_TESTING*BUCKET_WIDTH);
+    	int lineCountPerThisBucket = ceil(numOfTestValues/8.0);
+    	neededVectorSize += lineCountPerThisBucket;
+    	if(neededVectorSize > inputVec.size())
+    		inputVec.resize(neededVectorSize);
+    	lineCounts[i] = lineCountPerThisBucket;
+    	int base = i*LINES_PER_BUCKET;
+    	//fill input stream vector and sw sim results
+    	for(j = 0; j < numOfTestValues; j++ ){
+    		if (j%8 == 0) lastLineIndex++;
+    		ContribPair inp;
+    		inp.indexData = rand() % BUCKET_WIDTH ;
+    		inp.valData = (rand() % 10) + 1;
+    		inputVec[lastLineIndex].set(j%8, inp);
+
+    		ValueT prev = sums_sw[ base + inp.indexData/16].get(inp.indexData%16);
+
+    		sums_sw[base + inp.indexData/16].set(inp.indexData%16,inp.valData + prev);
+    		//std::cout << "Sums_sw: " << sums_sw[base + inp.indexData/16].get(inp.indexData%16) << std::endl;
+    	}
+    	//fill last line of input vec with zeros if there are remaining empty spaces
+    	if(numOfTestValues%8 != 0 )
+    		while(j%8 !=  0){
+    			ContribPair inp;
+    			inp.valData = 0;
+    			inp.indexData = 0;
+    			inputVec[ lastLineIndex].set(j%8, inp);
+    			j++;
+    		}
+    }
+    std::cout << "Input vector size is " << neededVectorSize << ", needed memory size is: " << neededVectorSize*64 << std::endl ;
+    globalbuffersize = neededVectorSize*64;
 
     short ddr_banks = NDDR_BANKS;
-    std::cout << "..... Came SO FAR" << std::endl ;
+    std::cout << "Global Buffer size is now: " << globalbuffersize <<std::endl ;
 
     /* Index for the ddr pointer array: 4=4, 3=3, 2=2, 1=2 */
     char num_buffers = ddr_banks;
@@ -184,9 +210,9 @@ int main(int argc, char** argv) {
      * buffer[2] is input1
      * buffer[3] is output1 */
     cl::Buffer *buffer[num_buffers];
-
+    cl::Buffer *lineCountBuffer;
     cl_mem_ext_ptr_t ext_buffer[num_buffers];
-
+    cl_mem_ext_ptr_t ext_buffer_lc;
     #if NDDR_BANKS > 1
         unsigned xcl_bank[4] = {
             XCL_MEM_DDR_BANK0,
@@ -211,6 +237,16 @@ int main(int argc, char** argv) {
                 return EXIT_FAILURE;
             }
         } /* End for (i < ddr_banks) */
+        ext_buffer_lc.flags = xcl_bank[0];
+        ext_buffer_lc.obj = NULL;
+        ext_buffer_lc.param = 0;
+
+        OCL_CHECK(err, lineCountBuffer = new cl::Buffer(context,
+                			            	CL_MEM_READ_ONLY| CL_MEM_EXT_PTR_XILINX,
+                            				lineCounts.size()*32,
+											&ext_buffer_lc,
+                            				&err));
+
     #else
 	     OCL_CHECK(err, buffer[0] = new cl::Buffer(context,
          				            CL_MEM_READ_WRITE,
@@ -229,6 +265,26 @@ int main(int argc, char** argv) {
     printf("Starting kernel to read/write %.0lf MB bytes from/to global memory... \n", dmbytes);
 
     /* Write input buffer */
+    ValueT *map_lcount_buffer;
+    OCL_CHECK(err, map_lcount_buffer = (ValueT*) q.enqueueMapBuffer(*(lineCountBuffer),
+							                                 CL_FALSE,
+                            							     CL_MAP_WRITE_INVALIDATE_REGION,
+                            							     0,
+															 lineCounts.size()*32,
+                            							     NULL,
+							                                 NULL,
+                            							     &err));
+    OCL_CHECK(err, err = q.finish());
+    for(size_t i = 0; i< lineCounts.size(); i++) {
+            map_lcount_buffer[i] = lineCounts[i];
+            if(i<30)
+            	std::cout << "i: " << i <<", line count: " <<  lineCounts[i] << std::endl;
+        }
+        OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[0]),
+                    				  map_lcount_buffer));
+
+        OCL_CHECK(err, err = q.finish());
+
     /* Map input buffer for PCIe write */
     LineT *map_input_buffer0;
     OCL_CHECK(err, map_input_buffer0 = (LineT*) q.enqueueMapBuffer(*(buffer[0]),
@@ -243,7 +299,7 @@ int main(int argc, char** argv) {
     std::cout << "..... Came SO FAR" << std::endl ;
 
     /* prepare data to be written to the device */
-    for(size_t i = 0; i<128*8; i++) {
+    for(size_t i = 0; i< inputVec.size(); i++) {
         map_input_buffer0[i] = inputVec[i];
     }
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[0]),
@@ -283,11 +339,12 @@ int main(int argc, char** argv) {
     OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, *(buffer[buffer_index++])));
     #if NDDR_BANKS == 3
        OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, *(buffer[buffer_index++])));
+       OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, *lineCountBuffer ));
     #elif NDDR_BANKS > 3
        OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, *(buffer[buffer_index++])));
        OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, *(buffer[buffer_index++])));
     #endif
-    OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, num_blocks));
+//    OCL_CHECK(err, err = krnl_global_bandwidth.setArg(arg_index++, num_blocks));
     printf("Kernel args set...");
 
     unsigned long nsduration;

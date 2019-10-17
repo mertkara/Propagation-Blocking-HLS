@@ -16,7 +16,7 @@
       </binaryContainers>
     </lastBuildOptions>
   </configuration>
-  <configuration name="Emulation-HW" id="com.xilinx.sdx.opencl.config.hw_emu.51222354">
+  <configuration name="Emulation-HW" id="com.xilinx.sdx.opencl.config.hw_emu.51222354" dirty="true">
     <configBuildOptions xsi:type="openclProject:OpenCLOptions" kernelDebug="true" target="hw_emu">
       <binaryContainers name="binary_container_1">
         <kernels name="top_kernel" sourceFile="src/compute_funct.cpp" maxMemoryPorts="true">
