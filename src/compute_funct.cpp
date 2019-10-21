@@ -9,15 +9,16 @@
 
 const int ArrSize = 2048;
 
-static void read_to_BRAM(LineT* inp, int inpBegin, ContribPair *buffer, int lineCnt) {
+static void read_to_BRAM(LineT* inp, ValueT inpBegin, hls::stream<ContribPair> inStream[8], int lineCnt) {
 
 	mem_rd: for (int i=0; i < lineCnt; ++i) {
 #pragma HLS pipeline II=1
 		LineT line = inp[inpBegin+i];
 		for(int j = 0; j < 8; j++)
-#pragma HLS unroll factor=2 skip_exit_check
-			buffer[i*8+j] = line.get(j) ;
+#pragma HLS unroll factor=8 skip_exit_check
+			inStream[j] << line.get(j) ;
 	}
+
 }
 static void read_output_to_BRAM(outLineT* inp, int inpBegin, ValueT buffer[BUCKET_WIDTH] ) {
 
@@ -38,7 +39,7 @@ static void write_output_to_GMEM(ValueT* inp, int inpBegin, outLineT buffer[BUCK
 {
 			#pragma HLS unroll factor=16 skip_exit_check
 			line.set(j,inp[i+j]);
-			std::cout << "index: " << i+j << ", val: " << inp[i+j] << std::endl;
+			//std::cout << "index: " << i+j << ", val: " << inp[i+j] << std::endl;
 	}
 		buffer[inpBegin+i/16] = line ;
 	}
@@ -50,7 +51,8 @@ lineCount_rd:
         array[i] = in[i];
     }
 }
-static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
+
+static void compute_kernel(hls::stream<ContribPair> inStream[8], ValueT* arr, int lineCnt ){
 	IndexT lastAddr = -1;
 	ValueT lastVal = 0;
 	ContribPair pair;
@@ -63,7 +65,7 @@ static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
 #pragma HLS pipeline II=1
 #pragma HLS dependence variable=arr distance=2 inter true
 
-		pair = inputs[i] ; // read the current address
+		pair = inStream[i%8].read() ; // read the current address
 		index = pair.indexData;
 		val = pair.valData;
 
@@ -81,7 +83,14 @@ static void compute_kernel(ContribPair* inputs, ValueT* arr, int lineCnt ){
 		lastVal = currVal + val ;
 	}
 }
+static void read_and_compute(LineT* inp, ValueT inpBegin, ValueT* arr,int lineCnt){
+	hls::stream<ContribPair> inStream[8];
+	#pragma HLS STREAM variable = inStream depth = 4
 
+	#pragma HLS dataflow
+	read_to_BRAM(inp, inpBegin, inStream, lineCnt);
+	compute_kernel(inStream,arr,lineCnt);
+}
 extern "C" {
 
 void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, ValueT* lineCounts) {
@@ -99,15 +108,18 @@ void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, ValueT
 	ContribPair inputArray[ArrSize];
 	ValueT outputArray[BUCKET_WIDTH];
 	ValueT lCounts[NUM_OF_BUCKETS];
+	//static hls::stream<ContribPair> inStream[8];
+	//#pragma HLS STREAM variable = inStream depth = 4
+
 	//#pragma HLS array_partition variable=buffers complete dim=1
 	ValueT inputStreamStartingIndex = 0;
 
 	read_line_counts(lineCounts, lCounts);
-
 	for(int i = 0; i < NUM_OF_BUCKETS; i++){
-    	read_to_BRAM(inputVals, inputStreamStartingIndex, inputArray, lCounts[i]);
 		read_output_to_BRAM(outputSums, i*BUCKET_WIDTH/16, outputArray);
-		compute_kernel(inputArray,outputArray,lCounts[i]);
+		read_and_compute(inputVals, inputStreamStartingIndex , outputArray,lCounts[i]);
+//		read_to_BRAM(inputVals, &inputStreamStartingIndex, inStream, lCounts[i]);
+//		compute_kernel(inStream,outputArray,lCounts[i]);
 		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
 		inputStreamStartingIndex += lCounts[i];
 	}

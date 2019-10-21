@@ -21,7 +21,7 @@ using std::string ;
 #define NUM_OF_BUCKETS OUTPUT_VECTOR_SIZE/BUCKET_WIDTH // assume divisible for now
 
 //bucket densities for testing
-#define BUCKET_DENSITY_FOR_TESTING 2
+#define BUCKET_DENSITY_FOR_TESTING 1
 #define NUM_OF_TEST_SIZE 2048*8
 
 #define BURST_LINE_CNT 32
