@@ -85,8 +85,8 @@ static void compute_kernel(hls::stream<ContribPair> inStream[8], ValueT* arr, in
 }
 static void read_and_compute(LineT* inp, ValueT inpBegin, ValueT* arr,int lineCnt){
 	hls::stream<ContribPair> inStream[8];
-	#pragma HLS STREAM variable = inStream depth = 4
-
+	#pragma HLS STREAM variable = inStream depth = 12
+	#pragma HLS array_partition variable=inStream complete
 	#pragma HLS dataflow
 	read_to_BRAM(inp, inpBegin, inStream, lineCnt);
 	compute_kernel(inStream,arr,lineCnt);

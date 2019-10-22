@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
     OCL_CHECK(err, cl::Program program(context, devices, bins, NULL, &err));
 
 	/* Initialize Buffers */
-    LineVector inputVec(1024); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
+    LineVector inputVec(100); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
     outLineVector sums(NUM_OF_BUCKETS*LINES_PER_BUCKET);
     outLineVector sums_sw(NUM_OF_BUCKETS*LINES_PER_BUCKET);
     lineCountsVector lineCounts(NUM_OF_BUCKETS);

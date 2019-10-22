@@ -10,7 +10,7 @@ using std::endl;
 using std::string ;
 //PARAM DEFINITIONS
 #define NDDR_BANKS 3
-#define OUTPUT_VECTOR_SIZE 1024*1024 // 1 MB
+#define OUTPUT_VECTOR_SIZE 1024*5 // 1 MB
 #define BUCKET_WIDTH 512 //in terms of elements
 #define OUTPUT_LINE_SIZE 16
 #define INPUT_LINE_SIZE 8 //Contrib Pairs
@@ -21,7 +21,7 @@ using std::string ;
 #define NUM_OF_BUCKETS OUTPUT_VECTOR_SIZE/BUCKET_WIDTH // assume divisible for now
 
 //bucket densities for testing
-#define BUCKET_DENSITY_FOR_TESTING 1
+#define BUCKET_DENSITY_FOR_TESTING 2
 #define NUM_OF_TEST_SIZE 2048*8
 
 #define BURST_LINE_CNT 32
