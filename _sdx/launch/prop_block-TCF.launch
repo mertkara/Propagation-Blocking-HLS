@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <launchConfiguration type="com.xilinx.opencl.launch.openCLLaunch.tcf">
+<stringAttribute key="HW_EM_LAUNCH_WAVEFORM" value=""/>
 <stringAttribute key="SDACCEL_DATA_TRANSFER_TRACE" value="coarse"/>
 <booleanAttribute key="SDACCEL_ENABLE_PROFILE" value="true"/>
 <stringAttribute key="SDACCEL_STALL_TRACE" value="off"/>
@@ -8,9 +9,9 @@
 <booleanAttribute key="SDX_USE_DEFAULT_WORKING_DIR" value="true"/>
 <booleanAttribute key="com.xilinx.sdx.internal.opencl.language.ui.launch.tcf.stop_at_kernal_start" value="true"/>
 <booleanAttribute key="com.xilinx.sdx.internal.opencl.language.ui.launch.tcf.stop_at_main" value="true"/>
-<stringAttribute key="org.eclipse.cdt.launch.PROGRAM_ARGUMENTS" value=""/>
 <stringAttribute key="org.eclipse.cdt.launch.PROGRAM_NAME" value="Emulation-SW/prop_block.exe"/>
 <stringAttribute key="org.eclipse.cdt.launch.PROJECT_ATTR" value="prop_block"/>
+<booleanAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_AUTO_ATTR" value="false"/>
 <stringAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_ID_ATTR" value=""/>
 <stringAttribute key="org.eclipse.cdt.launch.WORKING_DIRECTORY" value="${workspace_loc:prop_block}/Emulation-SW/prop_block-TCF"/>
 <listAttribute key="org.eclipse.debug.core.MAPPED_RESOURCE_PATHS">
