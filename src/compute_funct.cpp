@@ -5,34 +5,35 @@
 #include <sstream>
 #include "types.h"
 
+static void read_to_BRAM(LineT* inp, LineT* bramArray, int lineCnt) {
+static int inputStreamStartingIndex = 0;
+	mem_rd: for (int i=0; i < lineCnt; ++i) {
+#pragma HLS pipeline II=1
+		bramArray[i] = inp[inputStreamStartingIndex +i];
+	}
+	inputStreamStartingIndex += lineCnt;
+}
 
-static void read_to_BRAM(LineT* inp, ValueT inpBegin, hls::stream<ContribPair> inStream[8], int lineCnt) {
+static void read_BRAM_to_FIFOS(LineT* inp, hls::stream<ContribPair> inStream[8], int lineCnt) {
 
 	mem_rd: for (int i=0; i < lineCnt; ++i) {
 #pragma HLS pipeline II=1
-		LineT line = inp[inpBegin+i];
+		LineT line = inp[i];
 		for(int j = 0; j < 8; j++)
 #pragma HLS unroll factor=8 skip_exit_check
 			inStream[j] << line.get(j) ;
 	}
 }
-static void pickAndSend(int streamId,int lineCnt, int ind,int *remLines, ContribPair *pairs, hls::stream<ContribPair>& inStream,hls::stream<ContribPair>& outStream,hls::stream<bool>& validStream){
-#pragma HLS function_instantiate variable=streamId
-	if(*remLines == 0){
-		*pairs = inStream.read();
-		*remLines += 1;
+static void initializeSumArray(ValueT buffer[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS]){
+	for(int i = 0; i < NUM_OF_PARTITIONS; i++){
+#pragma HLS unroll
+		for( int j = 0; j < BUCKET_WIDTH/NUM_OF_PARTITIONS; j++){
+#pragma HLS unroll factor 2
+			buffer[i][j] = 0;
+		}
 	}
-	else if( (*remLines < lineCnt+1 )&& ((*pairs).indexData%NUM_OF_PARTITIONS == streamId)){
-		validStream << true;
-		outStream << *pairs;
-		if(*remLines < lineCnt) {
-			*pairs = inStream.read();
-			*remLines += 1;
-		}else *remLines+=5;
-	}
-
-
 }
+
 static void read_input_to_fifos(hls::stream<ContribPair>* inStream, hls::stream<ContribPair>* outStream,hls::stream<bool>* validStream, int lineCnt) {
 	int i;
 	ContribPair pairs[8];
@@ -125,6 +126,7 @@ static void read_output_to_BRAM(outLineT* inp, int inpBegin, ValueT buffer[NUM_O
 	}
 }
 static void write_output_to_GMEM(ValueT inp[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS], int inpBegin, outLineT buffer[BUCKET_WIDTH/16] ) {
+	static int bucketID = 0;
 	outLineT line;
 	ValueT valToWrite;
 	mem_wr_output: for (int i= 0; i < BUCKET_WIDTH; i++) {
@@ -137,19 +139,26 @@ static void write_output_to_GMEM(ValueT inp[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_
 		line.set(i%16,valToWrite);
 		//}
 		//std::cout << "index1: " << i%NUM_OF_PARTITIONS <<", index2:"<< i/NUM_OF_PARTITIONS << ", val: " << valToWrite << std::endl;
-		if( i%16 == 15) buffer[inpBegin+i/16] = line ;
+		if( i%16 == 15) buffer[bucketID*BUCKET_WIDTH/16+i/16] = line ;
 	}
+	bucketID++;
+	//std::cout<< "write: "<<bucketID << std::endl;
 
 }
-static void read_line_counts(ValueT *in, ValueT* array) {
+static int read_line_counts(outLineT *in, ValueT* array) {
 	lineCount_rd:
+	int sum = 0;
 	for (int i = 0; i < NUM_OF_BUCKETS; i++) {
 #pragma HLS PIPELINE II=1
-		array[i] = in[i];
+		array[i] = in[i/16].get(i%16);
+		//std::cout << "Sum: "<<sum ;
+		sum += (in[i/16].get(i%16)/INPUT_ARRAY_SIZE );
+		if(array[i]%32 != 0) sum++;
+		//std::cout << "SumNext: "<<sum <<std::endl;
 	}
+	return sum;
 }
-
-static void compute(hls::stream<ContribPair> &inStream, hls::stream<bool>& validStream ,ValueT* arr ){
+static void compute(hls::stream<ContribPair> &inStream, hls::stream<bool>& validStream ,ValueT arr[BUCKET_WIDTH/NUM_OF_PARTITIONS] ){
 #pragma HLS function_instantiate variable=inStream,validStream
 	IndexT lastAddr = -1;
 	ValueT lastVal = 0;
@@ -186,18 +195,21 @@ static void compute(hls::stream<ContribPair> &inStream, hls::stream<bool>& valid
 	}
 
 }
-static void compute_kernel(hls::stream<ContribPair>* inStream,hls::stream<bool>* validStream, ValueT arr[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS], int lineCnt ){
+
+static void compute_kernel(hls::stream<ContribPair>* inStream,hls::stream<bool>* validStream, ValueT arr[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS]){
+//#pragma HLS array_partition variable=arr complete dim=1
 
 	comp_unroll_loop: for(int i = 0; i < 4; i++){
 		//#pragma HLS array_partition variable=arr cyclic factor=4 dim=1
 
 #pragma HLS dependence variable=arr inter false
-		//#pragma HLS dependence variable=arr intra false
+#pragma HLS dependence variable=arr intra false
 #pragma HLS unroll
 		compute(inStream[i], validStream[i], arr[i]);
 	}
 }
-static void read_and_compute(LineT* inp, ValueT inpBegin, ValueT arr[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS],int lineCnt){
+
+static void read_and_compute(LineT* inp, ValueT arr[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS],int lineCnt){
 	hls::stream<ContribPair> inStream[8];
 	hls::stream<ContribPair> outStream[4];
 	hls::stream<bool> validStream[4];
@@ -209,16 +221,16 @@ static void read_and_compute(LineT* inp, ValueT inpBegin, ValueT arr[NUM_OF_PART
 #pragma HLS array_partition variable=inStream complete
 #pragma HLS array_partition variable=outStream complete
 #pragma HLS array_partition variable=validStream complete
+#pragma HLS array_partition variable=arr complete dim=1
 
 #pragma HLS dataflow
-
-	read_to_BRAM(inp, inpBegin, inStream, lineCnt);
+	read_BRAM_to_FIFOS(inp, inStream, lineCnt);
 	read_input_to_fifos(inStream, outStream, validStream,lineCnt);
-	compute_kernel(outStream,validStream ,arr,lineCnt);
+	compute_kernel(outStream,validStream ,arr );
 }
 extern "C" {
 
-void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, ValueT* lineCounts) {
+void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, outLineT* lineCounts) {
 #pragma HLS INTERFACE m_axi port=inputVals offset=slave bundle=gmem0
 #pragma HLS INTERFACE m_axi port=lineCounts offset=slave bundle=gmem0
 #pragma HLS INTERFACE m_axi port=indexVals offset=slave bundle=gmem1
@@ -230,24 +242,72 @@ void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, ValueT
 #pragma HLS INTERFACE s_axilite port=return bundle=control
 
 
-	ValueT outputArray[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS]; //manual cyclic partition
+	ValueT outputArray[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS];
+	ValueT outputArray2[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS]; //manual cyclic partition and ping-pong buf
 	ValueT lCounts[NUM_OF_BUCKETS];
+	LineT inputLines[INPUT_ARRAY_SIZE];
+	LineT inputLines2[INPUT_ARRAY_SIZE];
 
 
 #pragma HLS array_partition variable=outputArray complete dim=1
+#pragma HLS array_partition variable=outputArray2 complete dim=1
 //#pragma HLS array_partition variable=outputArray complete dim=2
 
 	ValueT inputStreamStartingIndex = 0;
+	int totalCounts;
+	totalCounts = read_line_counts(lineCounts, lCounts);
 
-	read_line_counts(lineCounts, lCounts);
+	bool shouldCarryOn = false;
+	int remainingLines = lCounts[0];
+	std::cout << "init"<<totalCounts << std::endl;
+	initializeSumArray(outputArray);
+	shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+	int readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+	read_to_BRAM(inputVals, inputLines, readLines);
 
-	for(int i = 0; i < NUM_OF_BUCKETS; i++){
-//#pragma HLS unroll factor=2
-		read_output_to_BRAM(outputSums, i*BUCKET_WIDTH/16, outputArray);
-		read_and_compute(inputVals, inputStreamStartingIndex , outputArray,lCounts[i]);
-		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
-		inputStreamStartingIndex += lCounts[i];
+
+	remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[1];
+
+	int bucketID = 0;
+	bucketID = shouldCarryOn ? bucketID:++bucketID;
+	bool shouldCarryOn2;
+	int i;
+	for( i = 0; i < totalCounts-1 ; i++){
+		if(i%2 == 0){
+			shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
+			read_to_BRAM(inputVals, inputLines2, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
+			read_and_compute(inputLines, outputArray, readLines);
+
+			readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
+			bucketID = shouldCarryOn2 ? bucketID:++bucketID;
+			remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+
+
+			if(!shouldCarryOn){
+				write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+				initializeSumArray(outputArray);
+			}
+		}else{
+			shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+			read_to_BRAM(inputVals, inputLines, shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines);
+			read_and_compute(inputLines2, outputArray, readLines);
+
+			readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+			bucketID = shouldCarryOn ? bucketID:++bucketID;
+			remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+			//std::cout << "bucket: "<< bucketID << " rmml: "<< remainingLines << ", readLines: "<< readLines<< std::endl;
+			if(!shouldCarryOn2){
+				write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+				initializeSumArray(outputArray);
+			}
+		}
 	}
+	//std::cout << i<<"bucket: "<< bucketID << " rmml: "<< remainingLines << ", readLines: "<< readLines<< std::endl;
+	if(i%2==0)
+		read_and_compute(inputLines, outputArray, readLines);
+	else
+		read_and_compute(inputLines2, outputArray, readLines);
+	write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
 
 }
 }

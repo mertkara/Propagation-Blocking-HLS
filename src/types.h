@@ -3,16 +3,16 @@
 #include <string>
 #include <vector>
 
-
 using std::cout;
 using std::vector;
 using std::endl;
 using std::string ;
 //PARAM DEFINITIONS
+#define INPUT_ARRAY_SIZE 72
 #define NUM_OF_PARTITIONS 4
 #define NDDR_BANKS 3
-#define OUTPUT_VECTOR_SIZE 1024*15 // 1 MB
-#define BUCKET_WIDTH 512 //in terms of elements
+#define OUTPUT_VECTOR_SIZE 1024*16 // 1 MB
+#define BUCKET_WIDTH 512*2//in terms of elements
 #define OUTPUT_LINE_SIZE 16
 #define INPUT_LINE_SIZE 8 //Contrib Pairs
 #define LINES_PER_BUCKET BUCKET_WIDTH/16

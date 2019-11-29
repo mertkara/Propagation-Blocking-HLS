@@ -118,7 +118,7 @@ typedef vector<ValueT, aligned_allocator<ValueT>> ValueVec;
 typedef vector<IndexT, aligned_allocator<IndexT>> IndexVec;
 typedef vector<LineT, aligned_allocator<LineT>> LineVector;
 typedef vector<outLineT, aligned_allocator<outLineT>> outLineVector;
-typedef vector<ValueT, aligned_allocator<ValueT>> lineCountsVector;
+typedef vector<outLineT, aligned_allocator<outLineT>> lineCountsVector;
 
 int main(int argc, char** argv) {
 
@@ -158,7 +158,7 @@ int main(int argc, char** argv) {
     LineVector inputVec(100); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
     outLineVector sums(NUM_OF_BUCKETS*LINES_PER_BUCKET);
     outLineVector sums_sw(NUM_OF_BUCKETS*LINES_PER_BUCKET);
-    lineCountsVector lineCounts(NUM_OF_BUCKETS);
+    lineCountsVector lineCounts(NUM_OF_BUCKETS/16);
 
     int lastLineIndex = -1;
     int neededVectorSize = 0;
@@ -169,7 +169,13 @@ int main(int argc, char** argv) {
     	neededVectorSize += lineCountPerThisBucket;
     	if(neededVectorSize > inputVec.size())
     		inputVec.resize(neededVectorSize);
-    	lineCounts[i] = lineCountPerThisBucket;
+    	if(i%16 == 0){
+    		outLineT t;
+    		t.data = 0;
+    		lineCounts[i/16] = t;
+    	}
+//    	std::cout << lineCountPerThisBucket << " lp " <<std::endl;
+    	lineCounts[i/16].set(i%16, lineCountPerThisBucket);
     	int base = i*LINES_PER_BUCKET;
     	//fill input stream vector and sw sim results
     	for(j = 0; j < numOfTestValues; j++ ){
@@ -180,7 +186,6 @@ int main(int argc, char** argv) {
     		inputVec[lastLineIndex].set(j%8, inp);
 
     		ValueT prev = sums_sw[ base + inp.indexData/16].get(inp.indexData%16);
-
     		sums_sw[base + inp.indexData/16].set(inp.indexData%16,inp.valData + prev);
     		//std::cout << "Sums_sw: " << sums_sw[base + inp.indexData/16].get(inp.indexData%16) << std::endl;
     	}
@@ -243,7 +248,7 @@ int main(int argc, char** argv) {
 
         OCL_CHECK(err, lineCountBuffer = new cl::Buffer(context,
                 			            	CL_MEM_READ_ONLY| CL_MEM_EXT_PTR_XILINX,
-                            				lineCounts.size()*32,
+                            				lineCounts.size()*512,
 											&ext_buffer_lc,
                             				&err));
 
@@ -265,20 +270,20 @@ int main(int argc, char** argv) {
     printf("Starting kernel to read/write %.0lf MB bytes from/to global memory... \n", dmbytes);
 
     /* Write input buffer */
-    ValueT *map_lcount_buffer;
-    OCL_CHECK(err, map_lcount_buffer = (ValueT*) q.enqueueMapBuffer(*(lineCountBuffer),
+    outLineT *map_lcount_buffer;
+    OCL_CHECK(err, map_lcount_buffer = (outLineT*) q.enqueueMapBuffer(*(lineCountBuffer),
 							                                 CL_FALSE,
                             							     CL_MAP_WRITE_INVALIDATE_REGION,
                             							     0,
-															 lineCounts.size()*32,
+															 lineCounts.size()*512,
                             							     NULL,
 							                                 NULL,
                             							     &err));
     OCL_CHECK(err, err = q.finish());
     for(size_t i = 0; i< lineCounts.size(); i++) {
             map_lcount_buffer[i] = lineCounts[i];
-            if(i<30)
-            	std::cout << "i: " << i <<", line count: " <<  lineCounts[i] << std::endl;
+            //if(i<30)
+            	//std::cout << "i: " << i <<", line count: " <<  lineCounts[i] << std::endl;
         }
         OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[0]),
                     				  map_lcount_buffer));
@@ -369,15 +374,20 @@ int main(int argc, char** argv) {
     OCL_CHECK(err, err = q.finish());
 
     std::cout << "Kernel Duration..." << nsduration << " ns" <<std::endl;
-
+int numOfmismatch = 0;
     /* Check the results of output0 */
     for (int i = 0; i < OUTPUT_VECTOR_SIZE/16; i++) {
     	for(int j = 0; j <16;j++)
     		if (map_output_buffer0[i].get(j) != sums_sw[i].get(j) )//(input_host[i] + 1) % 256)
     	  {
+    			numOfmismatch++;
     	  	  std::cout << "ERROR : kernel0 failed to copy line "<< i <<" data" << j <<"; should be "<<  sums_sw[i].get(j) << "but hw res is " <<map_output_buffer0[i].get(j)<< std::endl ;
-            return EXIT_FAILURE;
+
         }
+    }
+    if(numOfmismatch > 0){
+    	std::cout << "ERROR : NUM OF MISMATCH = "<< numOfmismatch << std::endl ;
+    	return EXIT_FAILURE;
     }
     #if NDDR_BANKS > 3
         unsigned char *map_output_buffer1;
@@ -413,12 +423,13 @@ int main(int argc, char** argv) {
     /* Profiling information */
     double dnsduration = ((double)nsduration);
     double dsduration = dnsduration / ((double) 1000000000);
-
+    double pairsPerSec = (neededVectorSize/dsduration);
     double bpersec = (dbytes/dsduration);
     double mbpersec = bpersec / ((double) 1024*1024 ) * ddr_banks;
 
     printf("Kernel completed read/write %.0lf MB bytes from/to global memory.\n", dmbytes);
     printf("Execution time = %f (sec) \n", dsduration);
+    printf("Pair per sec = %f \n", pairsPerSec);
     printf("Concurrent Read and Write Throughput = %f (MB/sec) \n", mbpersec);
 
     printf("TEST PASSED\n");
