@@ -35,16 +35,15 @@ static void initializeSumArray(ValueT buffer[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM
 }
 
 static void read_input_to_fifos(hls::stream<ContribPair>* inStream, hls::stream<ContribPair>* outStream,hls::stream<bool>* validStream, int lineCnt) {
-	int i;
+
 	ContribPair pairs[8];
 	int remLines[8];
-	int highestRemLineCount;
-	int highestRemCntIndex;
+
 	bool done = false;
-#pragma HLS array_partition variable=pairs complete dim=1
-#pragma HLS array_partition variable=remLines complete dim=1
-int li;
-	init_pairs_warm:for(li = 0; li < 8; li++){
+#pragma HLS array_partition variable=pairs complete
+#pragma HLS array_partition variable=remLines complete
+
+	init_pairs_warm:for(int li = 0; li < 8; li++){
 #pragma HLS dependence variable=pairs,inStream intra false
 #pragma HLS dependence variable=pairs,inStream inter false
 #pragma HLS unroll
@@ -87,14 +86,14 @@ int li;
 			}else remLines[(li+6)%8]+=5;
 		}
 */
-//#pragma HLS pipeline
+//#pragma HLS pipeline enable_flush
 	stream_unroll: for(int streamId = 0; streamId < NUM_OF_PARTITIONS; streamId++){
 #pragma HLS dependence variable=validStream,outStream,pairs,inStream inter false
 #pragma HLS dependence variable=validStream,outStream,pairs,inStream intra false
+//#pragma HLS loop_flatten
 
 #pragma HLS unroll
 		for(int j = streamId*2; j < 8 + streamId*2; j++ ){
-
 				if( (remLines[j%8] < lineCnt+1 )&& (pairs[j%8].indexData%NUM_OF_PARTITIONS == streamId )){
 					validStream[streamId] << true;
 					outStream[streamId] << pairs[j%8];
@@ -104,7 +103,7 @@ int li;
 					remLines[j%8]++;
 				}
 			}
-	}
+		}
 	done = ((remLines[0] + remLines[1] +remLines[2]+remLines[3]+remLines[4]+remLines[5]+remLines[6] +remLines[7]) == (lineCnt*8+8));
 	}
 
@@ -114,6 +113,122 @@ int li;
 		}
 
 }
+
+static void divideInputsOnBits(hls::stream<ContribPair>* inStream,hls::stream<ContribPair> midStream[8][NUM_OF_PARTITIONS], hls::stream<bool> midValidStream[8][NUM_OF_PARTITIONS],int lineCnt){
+	write_pairs:for(int i = 0; i < lineCnt; i++){
+#pragma HLS dependence variable=midStream,midValidStream,inStream intra false
+#pragma HLS dependence variable=midStream,midValidStream,inStream inter false
+		divide_unroll:for(int li = 0; li < 8; li++){
+#pragma HLS dependence variable=midStream,midValidStream,inStream intra false
+#pragma HLS dependence variable=midStream,midValidStream,inStream inter false
+#pragma HLS unroll
+				ContribPair pairToWrite = inStream[li].read();
+				midStream[li][ pairToWrite.indexData%NUM_OF_PARTITIONS ] << pairToWrite;
+				midValidStream[li][ pairToWrite.indexData%NUM_OF_PARTITIONS ] << true;
+		}
+	}
+	finalize: for(int i = 0; i < NUM_OF_PARTITIONS; i++){
+#pragma HLS unroll
+		for(int li = 0; li < 8; li++){
+#pragma HLS loop_flatten
+		midValidStream[li][ i ] << false;
+		}
+	}
+
+}
+
+static void sendPairsToPartitions(hls::stream<ContribPair> midStream[8][NUM_OF_PARTITIONS], hls::stream<bool> midValidStream[8][NUM_OF_PARTITIONS],hls::stream<bool>* validStream,hls::stream<ContribPair>* outStream,int lineCnt){
+#pragma HLS array_partition variable=midStream complete
+#pragma HLS array_partition variable=midValidStream complete
+#pragma HLS array_partition variable=validStream complete
+#pragma HLS array_partition variable=outStream complete
+
+int doneCount[NUM_OF_PARTITIONS] = {0};
+#pragma HLS array_partition variable=doneCount complete
+
+	stream_unroll: while(!((doneCount[0] + doneCount[1]+doneCount[2] + doneCount[3]) == (NUM_OF_PARTITIONS*9))){
+//#pragma HLS loop_merge
+#pragma HLS dependence variable=midStream,midValidStream,validStream,outStream intra false
+#pragma HLS dependence variable=midStream,midValidStream,validStream,outStream,doneCount inter false
+
+
+
+		//To allow unrolled region to run in parallel, it is crucial for it to be just consisting of direct instructions/functions without loops, if the unrolled region has loop, it runs it sequentially.
+		for(int streamId = 0; streamId < NUM_OF_PARTITIONS; streamId++){
+//#pragma HLS pipeline
+#pragma HLS unroll
+//#pragma HLS dependence variable=midStream,midValidStream,validStream,outStream,doneCount intra false
+#pragma HLS dependence variable=midStream,midValidStream,validStream,outStream,doneCount inter false
+
+			if(!midValidStream[0][streamId].empty()){
+				if(midValidStream[0][streamId].read() == true){
+					outStream[streamId] << midStream[0][streamId].read();
+					validStream[streamId] << true;}else doneCount[streamId]++;
+			}else if(!midValidStream[1][streamId].empty()){
+				if(midValidStream[1][streamId].read() == true){
+					outStream[streamId] << midStream[1][streamId].read();
+					validStream[streamId] << true;}else doneCount[streamId]++;
+
+			}else if(!midValidStream[2][streamId].empty()){
+				if(midValidStream[2][streamId].read() == true){
+					outStream[streamId] << midStream[2][streamId].read();
+					validStream[streamId] << true;}else doneCount[streamId]++;
+
+			}else if(!midValidStream[3][streamId].empty()){
+				if(midValidStream[3][streamId].read() == true){
+					outStream[streamId] << midStream[3][streamId].read();
+					validStream[streamId] << true;}else doneCount[streamId]++;
+
+			}else if(!midValidStream[4][streamId].empty()){
+				if(midValidStream[4][streamId].read() == true){
+					outStream[streamId] << midStream[4][streamId].read();
+					validStream[streamId] << true;}else doneCount[streamId]++;
+
+			}else if(!midValidStream[5][streamId].empty()){
+				if(midValidStream[5][streamId].read() == true){
+					outStream[streamId] << midStream[5][streamId].read();
+					validStream[streamId] << true;}else doneCount[streamId]++;
+
+			}else if(!midValidStream[6][streamId].empty()){
+				if(midValidStream[6][streamId].read() == true){
+					outStream[streamId] << midStream[6][streamId].read();
+					validStream[streamId] << true;}
+				else doneCount[streamId]++;
+			}else if(!midValidStream[7][streamId].empty()){
+				if(midValidStream[7][streamId].read() == true){
+					outStream[streamId] << midStream[7][streamId].read();
+					validStream[streamId] << true;
+				}else doneCount[streamId]++;
+			}else if(doneCount[streamId] == 8){
+				validStream[streamId] << false;
+				doneCount[streamId]++;
+				//exitLoop = true;
+			}
+
+		}
+	}
+
+}
+
+static void read_input_to_fifos2(hls::stream<ContribPair>* inStream, hls::stream<ContribPair>* outStream,hls::stream<bool>* validStream, int lineCnt) {
+
+	hls::stream<ContribPair> midStream[8][NUM_OF_PARTITIONS];
+	hls::stream<bool> midValidStream[8][NUM_OF_PARTITIONS];
+
+#pragma HLS array_partition variable=midStream complete dim=0
+#pragma HLS array_partition variable=midValidStream complete dim=0
+#pragma HLS STREAM variable = midStream depth = 8
+#pragma HLS STREAM variable = midValidStream depth = 8
+
+
+#pragma HLS dataflow
+	divideInputsOnBits(inStream, midStream, midValidStream, lineCnt);
+	sendPairsToPartitions(midStream, midValidStream, validStream,outStream,lineCnt);
+
+
+
+}
+
 
 static void read_output_to_BRAM(outLineT* inp, int inpBegin, ValueT buffer[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS] ) {
 
@@ -129,20 +244,30 @@ static void write_output_to_GMEM(ValueT inp[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_
 	static int bucketID = 0;
 	outLineT line;
 	ValueT valToWrite;
-	mem_wr_output: for (int i= 0; i < BUCKET_WIDTH; i++) {
-#pragma HLS pipeline II=1
+	outLineT outBuffer[BUCKET_WIDTH/16];
+//#pragma HLS array_map variable=inp instance=inpComb vertical
+//#pragma HLS interface port=inp bram
 
-		//		for(int j = 0; j < 16; j++)
-		//{
-		//#pragma HLS unroll factor=16 skip_exit_check
+//#pragma HLS dataflow
+
+	generate_for_burst: for (int i= 0; i < BUCKET_WIDTH; i++){
+#pragma HLS dependence variable=inp inter false
+#pragma HLS pipeline II=1
 		valToWrite = inp[i%NUM_OF_PARTITIONS][i/NUM_OF_PARTITIONS];
 		line.set(i%16,valToWrite);
-		//}
-		//std::cout << "index1: " << i%NUM_OF_PARTITIONS <<", index2:"<< i/NUM_OF_PARTITIONS << ", val: " << valToWrite << std::endl;
-		if( i%16 == 15) buffer[bucketID*BUCKET_WIDTH/16+i/16] = line ;
+		inp[i%NUM_OF_PARTITIONS][i/NUM_OF_PARTITIONS] = 0;
+		if( i%16 == 15) {
+#pragma HLS occurrence cycle=16
+			outBuffer[i/16] = line;
+		}
+	}
+
+	mem_wr_output: for (int i= 0; i < BUCKET_WIDTH/16; i++) {
+#pragma HLS pipeline II=1
+		buffer[bucketID*BUCKET_WIDTH/16+i] = outBuffer[i];
 	}
 	bucketID++;
-	//std::cout<< "write: "<<bucketID << std::endl;
+	//std::cout<< "write Bucket: "<<bucketID << std::endl;
 
 }
 static int read_line_counts(outLineT *in, ValueT* array) {
@@ -153,7 +278,7 @@ static int read_line_counts(outLineT *in, ValueT* array) {
 		array[i] = in[i/16].get(i%16);
 		//std::cout << "Sum: "<<sum ;
 		sum += (in[i/16].get(i%16)/INPUT_ARRAY_SIZE );
-		if(array[i]%32 != 0) sum++;
+		if(array[i]%INPUT_ARRAY_SIZE != 0) sum++;
 		//std::cout << "SumNext: "<<sum <<std::endl;
 	}
 	return sum;
@@ -225,7 +350,7 @@ static void read_and_compute(LineT* inp, ValueT arr[NUM_OF_PARTITIONS][BUCKET_WI
 
 #pragma HLS dataflow
 	read_BRAM_to_FIFOS(inp, inStream, lineCnt);
-	read_input_to_fifos(inStream, outStream, validStream,lineCnt);
+	read_input_to_fifos2(inStream, outStream, validStream,lineCnt);
 	compute_kernel(outStream,validStream ,arr );
 }
 extern "C" {
@@ -243,71 +368,193 @@ void top_kernel(LineT* inputVals, LineT* indexVals, outLineT* outputSums, outLin
 
 
 	ValueT outputArray[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS];
-	ValueT outputArray2[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS]; //manual cyclic partition and ping-pong buf
-	ValueT lCounts[NUM_OF_BUCKETS];
+	ValueT outputArrSec[NUM_OF_PARTITIONS][BUCKET_WIDTH/NUM_OF_PARTITIONS]; //manual cyclic partition and ping-pong buf
+	ValueT lCounts[NUM_OF_BUCKETS + 1]; //+1 for safety in the pipeline, dummy var
 	LineT inputLines[INPUT_ARRAY_SIZE];
-	LineT inputLines2[INPUT_ARRAY_SIZE];
+	LineT inputLinesSec[INPUT_ARRAY_SIZE];
 
-
+//#pragma HLS array_partition variable=inputLines complete dim=1
 #pragma HLS array_partition variable=outputArray complete dim=1
-#pragma HLS array_partition variable=outputArray2 complete dim=1
+#pragma HLS array_partition variable=outputArrSec complete dim=1
 //#pragma HLS array_partition variable=outputArray complete dim=2
 
 	ValueT inputStreamStartingIndex = 0;
 	int totalCounts;
 	totalCounts = read_line_counts(lineCounts, lCounts);
 
-	bool shouldCarryOn = false;
-	int remainingLines = lCounts[0];
-	std::cout << "init"<<totalCounts << std::endl;
-	initializeSumArray(outputArray);
-	shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
-	int readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
-	read_to_BRAM(inputVals, inputLines, readLines);
-
-
-	remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[1];
-
+	ap_uint<1> outputBucketID = 0;
 	int bucketID = 0;
-	bucketID = shouldCarryOn ? bucketID:++bucketID;
+	bool shouldCarryOn = false;
+	int readLines;
+	int remainingLines = lCounts[0];
 	bool shouldCarryOn2;
 	int i;
-	for( i = 0; i < totalCounts-1 ; i++){
+
+	std::cout << "init "<< totalCounts << std::endl;
+
+	initializeSumArray(outputArray);
+	initializeSumArray(outputArrSec);
+
+	shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+	readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+	read_to_BRAM(inputVals, inputLines, readLines);
+	bucketID = shouldCarryOn ? bucketID:++bucketID;
+	remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+
+	shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
+	read_to_BRAM(inputVals, inputLinesSec, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
+	read_and_compute(inputLines, outputArray, readLines);
+
+	readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
+	bucketID = shouldCarryOn2 ? bucketID:++bucketID;
+	remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+
+
+
+
+	for( i = 0; i < totalCounts-2 ; i++){
+//#pragma HLS dependence variable=inputLines inter false
+
 		if(i%2 == 0){
-			shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
-			read_to_BRAM(inputVals, inputLines2, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
-			read_and_compute(inputLines, outputArray, readLines);
-
-			readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
-			bucketID = shouldCarryOn2 ? bucketID:++bucketID;
-			remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
-
-
 			if(!shouldCarryOn){
-				write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
-				initializeSumArray(outputArray);
+				if(outputBucketID == 0){
+					shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLinesSec, outputArrSec, readLines);
+					read_to_BRAM(inputVals, inputLines, shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines);
+					write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+				//	initializeSumArray(outputArray); no need since write_output_to gmem already does this now!
+					outputBucketID++;
+					readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+				}else{
+					shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLinesSec, outputArray, readLines);
+					read_to_BRAM(inputVals, inputLines, shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines);
+					write_output_to_GMEM(outputArrSec, i*BUCKET_WIDTH/16, outputSums);
+//					initializeSumArray(outputArrSec);
+					outputBucketID--;
+					readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+				}
+
+			}else{
+				if(outputBucketID == 0){
+					shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLinesSec, outputArray, readLines);
+					read_to_BRAM(inputVals, inputLines, shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines);
+					readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+				}else{
+					shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLinesSec, outputArrSec, readLines);
+					read_to_BRAM(inputVals, inputLines, shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines);
+					readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+				}
 			}
 		}else{
-			shouldCarryOn = (remainingLines > INPUT_ARRAY_SIZE);
-			read_to_BRAM(inputVals, inputLines, shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines);
-			read_and_compute(inputLines2, outputArray, readLines);
-
-			readLines = shouldCarryOn ? INPUT_ARRAY_SIZE: remainingLines;
-			bucketID = shouldCarryOn ? bucketID:++bucketID;
-			remainingLines = shouldCarryOn ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
-			//std::cout << "bucket: "<< bucketID << " rmml: "<< remainingLines << ", readLines: "<< readLines<< std::endl;
 			if(!shouldCarryOn2){
-				write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
-				initializeSumArray(outputArray);
+				if(outputBucketID == 0){
+					shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLines, outputArrSec, readLines);
+					read_to_BRAM(inputVals, inputLinesSec, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
+					write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+//					initializeSumArray(outputArray);
+					outputBucketID++;
+					readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn2 ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+
+				}else{
+					shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLines, outputArray, readLines);
+					read_to_BRAM(inputVals, inputLinesSec, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
+					write_output_to_GMEM(outputArrSec, i*BUCKET_WIDTH/16, outputSums);
+//					initializeSumArray(outputArrSec);
+					outputBucketID--;
+					readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn2 ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+				}
+			}else{
+				if(outputBucketID == 0){
+					shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLines, outputArray, readLines);
+					read_to_BRAM(inputVals, inputLinesSec, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
+
+					readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn2 ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+
+				}else{
+					shouldCarryOn2 = (remainingLines > INPUT_ARRAY_SIZE);
+					read_and_compute(inputLines, outputArrSec, readLines);
+					read_to_BRAM(inputVals, inputLinesSec, shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines);
+					readLines = shouldCarryOn2 ? INPUT_ARRAY_SIZE: remainingLines;
+					bucketID = shouldCarryOn2 ? bucketID:++bucketID;
+					remainingLines = shouldCarryOn2 ? (remainingLines - INPUT_ARRAY_SIZE):  (int)lCounts[bucketID];
+				}
 			}
 		}
 	}
 	//std::cout << i<<"bucket: "<< bucketID << " rmml: "<< remainingLines << ", readLines: "<< readLines<< std::endl;
-	if(i%2==0)
-		read_and_compute(inputLines, outputArray, readLines);
-	else
-		read_and_compute(inputLines2, outputArray, readLines);
-	write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+	if(i%2 == 0){
+		if(!shouldCarryOn){
+			if(outputBucketID == 0){
+				std::cout << "1" << std::endl;
+				read_and_compute(inputLinesSec, outputArrSec, readLines);
+				write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+	//			initializeSumArray(outputArray);
+				outputBucketID++;
+			}else{
+				std::cout << "2" << std::endl;
+				read_and_compute(inputLinesSec, outputArray, readLines);
+				write_output_to_GMEM(outputArrSec, i*BUCKET_WIDTH/16, outputSums);
+		//		initializeSumArray(outputArrSec);
+				outputBucketID--;
+			}
+		}else{
+			std::cout << 3+outputBucketID << std::endl;
+			if(outputBucketID == 0)
+				read_and_compute(inputLinesSec, outputArray, readLines);
+			else
+				read_and_compute(inputLinesSec, outputArrSec, readLines);
+		}
+		i++;
+	}else{
+		if(!shouldCarryOn2){
+			std::cout << 5+outputBucketID << std::endl;
+			if(outputBucketID == 0){
+				read_and_compute(inputLines, outputArrSec, readLines);
+				write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+			//	initializeSumArray(outputArray);
+				outputBucketID++;
+			}else{
+				read_and_compute(inputLines, outputArray, readLines);
+				write_output_to_GMEM(outputArrSec, i*BUCKET_WIDTH/16, outputSums);
+				//initializeSumArray(outputArrSec);
+				outputBucketID--;
+			}
+		}else{
+			std::cout << 7+outputBucketID << std::endl;
+			if(outputBucketID == 0)
+				read_and_compute(inputLines, outputArray, readLines);
+			else
+				read_and_compute(inputLines, outputArrSec, readLines);
+		}
+		i++;
+	}
+	if(outputBucketID == 0){
+		std::cout << "9" << std::endl;
+		write_output_to_GMEM(outputArray, i*BUCKET_WIDTH/16, outputSums);
+	}else{
+		std::cout << "10" << std::endl;
+		write_output_to_GMEM(outputArrSec, i*BUCKET_WIDTH/16, outputSums);
+	}
 
 }
 }

@@ -8,11 +8,11 @@ using std::vector;
 using std::endl;
 using std::string ;
 //PARAM DEFINITIONS
-#define INPUT_ARRAY_SIZE 72
+#define INPUT_ARRAY_SIZE 256
 #define NUM_OF_PARTITIONS 4
 #define NDDR_BANKS 3
 #define OUTPUT_VECTOR_SIZE 1024*16 // 1 MB
-#define BUCKET_WIDTH 512*2//in terms of elements
+#define BUCKET_WIDTH 512//in terms of elements
 #define OUTPUT_LINE_SIZE 16
 #define INPUT_LINE_SIZE 8 //Contrib Pairs
 #define LINES_PER_BUCKET BUCKET_WIDTH/16
@@ -22,7 +22,7 @@ using std::string ;
 #define NUM_OF_BUCKETS OUTPUT_VECTOR_SIZE/BUCKET_WIDTH // assume divisible for now
 
 //bucket densities for testing
-#define BUCKET_DENSITY_FOR_TESTING 3
+#define BUCKET_DENSITY_FOR_TESTING 5
 //#define NUM_OF_TEST_SIZE 2048*8
 
 #define BURST_LINE_CNT 32

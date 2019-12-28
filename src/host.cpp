@@ -126,7 +126,8 @@ int main(int argc, char** argv) {
         printf("Usage: %s\n", argv[0]);
         return EXIT_FAILURE;
     }
-    srand (time(NULL));
+    srand(time(NULL));
+
 
     cl_int err;
     std::vector<cl::Device> devices = xcl::get_xil_devices();
@@ -181,7 +182,7 @@ int main(int argc, char** argv) {
     	for(j = 0; j < numOfTestValues; j++ ){
     		if (j%8 == 0) lastLineIndex++;
     		ContribPair inp;
-    		inp.indexData = rand() % BUCKET_WIDTH ;
+    		inp.indexData = rand() % (BUCKET_WIDTH) ;
     		inp.valData = (rand() % 10) + 1;
     		inputVec[lastLineIndex].set(j%8, inp);
 
