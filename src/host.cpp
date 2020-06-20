@@ -156,52 +156,57 @@ int main(int argc, char** argv) {
     OCL_CHECK(err, cl::Program program(context, devices, bins, NULL, &err));
 
 	/* Initialize Buffers */
-    LineVector inputVec(100); // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
+    outLineVector inputAddr(1);
+    outLineVector inputDelta(1);  // -- to do Let 1 MB for test purpose, then 1024*1024*8/512 = 16*1024
     outLineVector sums(NUM_OF_BUCKETS*LINES_PER_BUCKET);
     outLineVector sums_sw(NUM_OF_BUCKETS*LINES_PER_BUCKET);
-    lineCountsVector lineCounts(NUM_OF_BUCKETS/16);
+    lineCountsVector lineCounts(ceil(NUM_OF_BUCKETS/16.0));
 
     int lastLineIndex = -1;
     int neededVectorSize = 0;
     for(uint i = 0; i < NUM_OF_BUCKETS; i++) { //should work fine ...
     	int j;
     	int numOfTestValues = rand() % (BUCKET_DENSITY_FOR_TESTING*BUCKET_WIDTH);
-    	int lineCountPerThisBucket = ceil(numOfTestValues/8.0);
+    	int lineCountPerThisBucket = ceil(numOfTestValues/(double)(INPUT_LINE_SIZE));
     	neededVectorSize += lineCountPerThisBucket;
-    	if(neededVectorSize > inputVec.size())
-    		inputVec.resize(neededVectorSize);
-    	if(i%16 == 0){
+    	if(neededVectorSize > inputAddr.size()){
+    		inputAddr.resize(neededVectorSize);
+    		inputDelta.resize(neededVectorSize);
+    	}
+    	if(i%OUTPUT_LINE_SIZE == 0){
     		outLineT t;
     		t.data = 0;
-    		lineCounts[i/16] = t;
+    		lineCounts[i/OUTPUT_LINE_SIZE] = t;
     	}
-//    	std::cout << lineCountPerThisBucket << " lp " <<std::endl;
-    	lineCounts[i/16].set(i%16, lineCountPerThisBucket);
+    	//std::cout << lineCountPerThisBucket << " lp " <<std::endl;
+    	lineCounts[i/OUTPUT_LINE_SIZE].set(i%OUTPUT_LINE_SIZE, lineCountPerThisBucket);
     	int base = i*LINES_PER_BUCKET;
     	//fill input stream vector and sw sim results
     	for(j = 0; j < numOfTestValues; j++ ){
-    		if (j%8 == 0) lastLineIndex++;
+    		if (j%INPUT_LINE_SIZE == 0) lastLineIndex++;
     		ContribPair inp;
     		inp.indexData = rand() % (BUCKET_WIDTH) ;
-    		inp.valData = (rand() % 10) + 1;
-    		inputVec[lastLineIndex].set(j%8, inp);
+    		inp.valData = 1;//(rand() % 10) + 1;
+    		inputAddr[lastLineIndex].set(j%INPUT_LINE_SIZE, inp.indexData);
+    		inputDelta[lastLineIndex].set(j%INPUT_LINE_SIZE, inp.valData);
 
-    		ValueT prev = sums_sw[ base + inp.indexData/16].get(inp.indexData%16);
+    		ValueT prev = sums_sw[ base + inp.indexData/OUTPUT_LINE_SIZE].get(inp.indexData%OUTPUT_LINE_SIZE);
     		sums_sw[base + inp.indexData/16].set(inp.indexData%16,inp.valData + prev);
     		//std::cout << "Sums_sw: " << sums_sw[base + inp.indexData/16].get(inp.indexData%16) << std::endl;
     	}
     	//fill last line of input vec with zeros if there are remaining empty spaces
-    	if(numOfTestValues%8 != 0 )
-    		while(j%8 !=  0){
+    	if(numOfTestValues%INPUT_LINE_SIZE != 0 )
+    		while(j%INPUT_LINE_SIZE !=  0){
     			ContribPair inp;
     			inp.valData = 0;
     			inp.indexData = 0;
-    			inputVec[ lastLineIndex].set(j%8, inp);
+    			inputAddr[ lastLineIndex].set(j%INPUT_LINE_SIZE, inp.indexData);
+    			inputDelta[ lastLineIndex].set(j%INPUT_LINE_SIZE, inp.valData);
     			j++;
     		}
     }
-    std::cout << "Input vector size is " << neededVectorSize << ", needed memory size is: " << neededVectorSize*64 << std::endl ;
-    globalbuffersize = neededVectorSize*64;
+    std::cout << "Input vector size is " << neededVectorSize << ", needed memory size is: " << neededVectorSize*512 << std::endl ;
+    globalbuffersize = neededVectorSize*512;
 
     short ddr_banks = NDDR_BANKS;
     std::cout << "Global Buffer size is now: " << globalbuffersize <<std::endl ;
@@ -234,7 +239,7 @@ int main(int argc, char** argv) {
 
 	        buffer[i] = new cl::Buffer(context,
 		                           CL_MEM_READ_WRITE | CL_MEM_EXT_PTR_XILINX,
-                    			   globalbuffersize,
+                    			   globalbuffersize ,//+ lineCounts.size()*512,
             		    		   &ext_buffer[i],
 			                	   &err);
 
@@ -292,8 +297,8 @@ int main(int argc, char** argv) {
         OCL_CHECK(err, err = q.finish());
 
     /* Map input buffer for PCIe write */
-    LineT *map_input_buffer0;
-    OCL_CHECK(err, map_input_buffer0 = (LineT*) q.enqueueMapBuffer(*(buffer[0]),
+    outLineT *map_input_buffer0;
+    OCL_CHECK(err, map_input_buffer0 = (outLineT*) q.enqueueMapBuffer(*(buffer[0]),
 							                                 CL_FALSE,
                             							     CL_MAP_WRITE_INVALIDATE_REGION,
                             							     0,
@@ -302,16 +307,38 @@ int main(int argc, char** argv) {
 							                                 NULL,
                             							     &err));
     OCL_CHECK(err, err = q.finish());
-    std::cout << "..... Came SO FAR" << std::endl ;
+    std::cout << "... Addr Buffer Mapping ..." << std::endl ;
 
     /* prepare data to be written to the device */
-    for(size_t i = 0; i< inputVec.size(); i++) {
-        map_input_buffer0[i] = inputVec[i];
+    for(size_t i = 0; i< inputAddr.size(); i++) {
+        map_input_buffer0[i] = inputAddr[i];
     }
     OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[0]),
                 				  map_input_buffer0));
 
     OCL_CHECK(err, err = q.finish());
+
+    /* Map input buffer for PCIe write */
+       outLineT *map_input_buffer1;
+       OCL_CHECK(err, map_input_buffer1 = (outLineT*) q.enqueueMapBuffer(*(buffer[1]),
+   							                                 CL_FALSE,
+                               							     CL_MAP_WRITE_INVALIDATE_REGION,
+                               							     0,
+                                  							 globalbuffersize,
+                               							     NULL,
+   							                                 NULL,
+                               							     &err));
+       OCL_CHECK(err, err = q.finish());
+       std::cout << "... Delta Buffer Mapping ..." << std::endl ;
+
+       /* prepare data to be written to the device */
+       for(size_t i = 0; i< inputDelta.size(); i++) {
+           map_input_buffer1[i] = inputDelta[i];
+       }
+       OCL_CHECK(err, err = q.enqueueUnmapMemObject(*(buffer[1]),
+                   				  map_input_buffer1));
+
+       OCL_CHECK(err, err = q.finish());
 
 
     #if NDDR_BANKS > 3
@@ -383,8 +410,9 @@ int numOfmismatch = 0;
     	  {
     			numOfmismatch++;
     	  	  std::cout << "ERROR : kernel0 failed to copy line "<< i <<" data" << j <<"; should be "<<  sums_sw[i].get(j) << "but hw res is " <<map_output_buffer0[i].get(j)<< std::endl ;
-
+    	  	//  break;
         }
+    	if (numOfmismatch > 16) break;
     }
     if(numOfmismatch > 0){
     	std::cout << "ERROR : NUM OF MISMATCH = "<< numOfmismatch << std::endl ;
@@ -424,7 +452,7 @@ int numOfmismatch = 0;
     /* Profiling information */
     double dnsduration = ((double)nsduration);
     double dsduration = dnsduration / ((double) 1000000000);
-    double pairsPerSec = (neededVectorSize/dsduration);
+    double pairsPerSec = ((neededVectorSize*INPUT_LINE_SIZE)/dsduration);
     double bpersec = (dbytes/dsduration);
     double mbpersec = bpersec / ((double) 1024*1024 ) * ddr_banks;
 

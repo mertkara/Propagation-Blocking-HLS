@@ -8,18 +8,18 @@ using std::vector;
 using std::endl;
 using std::string ;
 //PARAM DEFINITIONS
-#define INPUT_ARRAY_SIZE 256
-#define NUM_OF_PARTITIONS 4
+#define INPUT_ARRAY_SIZE ((1024*18)/512)
+#define NUM_OF_PARTITIONS 16
 #define NDDR_BANKS 3
-#define OUTPUT_VECTOR_SIZE 1024*16 // 1 MB
-#define BUCKET_WIDTH 512//in terms of elements
+#define OUTPUT_VECTOR_SIZE (1024*32*18) // 1 MB
+#define BUCKET_WIDTH ((1024*18)/32) //in terms of elements
 #define OUTPUT_LINE_SIZE 16
-#define INPUT_LINE_SIZE 8 //Contrib Pairs
-#define LINES_PER_BUCKET BUCKET_WIDTH/16
+#define INPUT_LINE_SIZE 16 //Contrib Pairs
+#define LINES_PER_BUCKET (BUCKET_WIDTH/16)
 
-#define MAX_BUCKET_INDEX_VAL_SIZE BUCKET_WIDTH*BUCKET_WIDTH // not likely since sparcity
+#define MAX_BUCKET_INDEX_VAL_SIZE (BUCKET_WIDTH*BUCKET_WIDTH) // not likely since sparcity
 
-#define NUM_OF_BUCKETS OUTPUT_VECTOR_SIZE/BUCKET_WIDTH // assume divisible for now
+#define NUM_OF_BUCKETS (OUTPUT_VECTOR_SIZE/BUCKET_WIDTH) // assume divisible for now
 
 //bucket densities for testing
 #define BUCKET_DENSITY_FOR_TESTING 5
@@ -34,6 +34,11 @@ typedef struct ContribPair {
 	IndexT indexData;
 	ValueT valData;
 } ContribPair;
+
+typedef struct ContribPairPacket {
+		IndexT indexData;
+		ValueT valData;
+	} ContribPairPacket ;
 
 
 // The following class is to get bit counts of types in compile time
@@ -101,7 +106,7 @@ struct Type512 {
   }
 
 /*  string str() {
-    std::ostringstream oss ;
+    std::ostring:Dstream oss ;
     for (int vi=0; vi < VECTOR_SIZE; ++vi)
       oss << get(vi) << " " ;
     return oss.str() ;
