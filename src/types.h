@@ -3,26 +3,27 @@
 #include <string>
 #include <vector>
 
-
 using std::cout;
 using std::vector;
 using std::endl;
 using std::string ;
 //PARAM DEFINITIONS
+#define INPUT_ARRAY_SIZE ((1024*18)/512)
+#define NUM_OF_PARTITIONS 16
 #define NDDR_BANKS 3
-#define OUTPUT_VECTOR_SIZE 1024*1024 // 1 MB
-#define BUCKET_WIDTH 512 //in terms of elements
+#define OUTPUT_VECTOR_SIZE (1024*32*18) // 1 MB
+#define BUCKET_WIDTH ((1024*18)/32) //in terms of elements
 #define OUTPUT_LINE_SIZE 16
-#define INPUT_LINE_SIZE 8 //Contrib Pairs
-#define LINES_PER_BUCKET BUCKET_WIDTH/16
+#define INPUT_LINE_SIZE 16 //Contrib Pairs
+#define LINES_PER_BUCKET (BUCKET_WIDTH/16)
 
-#define MAX_BUCKET_INDEX_VAL_SIZE BUCKET_WIDTH*BUCKET_WIDTH // not likely since sparcity
+#define MAX_BUCKET_INDEX_VAL_SIZE (BUCKET_WIDTH*BUCKET_WIDTH) // not likely since sparcity
 
-#define NUM_OF_BUCKETS OUTPUT_VECTOR_SIZE/BUCKET_WIDTH // assume divisible for now
+#define NUM_OF_BUCKETS (OUTPUT_VECTOR_SIZE/BUCKET_WIDTH) // assume divisible for now
 
 //bucket densities for testing
-#define BUCKET_DENSITY_FOR_TESTING 2
-#define NUM_OF_TEST_SIZE 2048*8
+#define BUCKET_DENSITY_FOR_TESTING 5
+//#define NUM_OF_TEST_SIZE 2048*8
 
 #define BURST_LINE_CNT 32
 #define VECTOR_SIZE 8
@@ -33,6 +34,11 @@ typedef struct ContribPair {
 	IndexT indexData;
 	ValueT valData;
 } ContribPair;
+
+typedef struct ContribPairPacket {
+		IndexT indexData;
+		ValueT valData;
+	} ContribPairPacket ;
 
 
 // The following class is to get bit counts of types in compile time
@@ -81,7 +87,7 @@ struct Type512 {
 	ap_uint<512> data;
   ContribPair get(int idx) {
     // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE off
+#pragma HLS INLINE
 	  ContribPair res;
 	  ap_uint<64> pair = data((idx+1)*64-1,idx*64);
 	  res.indexData = pair(31,0);
@@ -100,7 +106,7 @@ struct Type512 {
   }
 
 /*  string str() {
-    std::ostringstream oss ;
+    std::ostring:Dstream oss ;
     for (int vi=0; vi < VECTOR_SIZE; ++vi)
       oss << get(vi) << " " ;
     return oss.str() ;
@@ -112,13 +118,13 @@ struct Type512_output {
   ap_uint<512> data ;
   ValueT get(int idx) {
     // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE off
+#pragma HLS INLINE
     return data((idx+1)*BitCnt<ValueT>::get()-1,idx*BitCnt<ValueT>::get()) ;
   }
 
   void set(int idx, ValueT val) {
     // HLS INLINE pragma is important. The tool does not recognize the C++ "inline" keyword.
-#pragma HLS INLINE off
+#pragma HLS INLINE
     data((idx+1)*BitCnt<ValueT>::get()-1, idx*BitCnt<ValueT>::get()) = val ;
   }
 
